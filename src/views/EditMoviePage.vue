@@ -14,13 +14,7 @@
           <p class="form-hero__subtitle">Update the details for {{ movie.title }}.</p>
         </div>
 
-        <MovieForm
-          :movie="movie"
-          :busy="busy"
-          :progress="progress"
-          @submit="handleSubmit"
-          @cancel="handleCancel"
-        />
+        <MovieForm :movie="movie" :busy="busy" @submit="handleSubmit" @cancel="handleCancel" />
       </div>
 
       <div v-else class="page-container page-container--narrow">
@@ -44,7 +38,6 @@ import PageHeader from '../components/PageHeader.vue';
 import MovieForm from '../components/MovieForm.vue';
 import EmptyState from '../components/EmptyState.vue';
 import { movieService } from '../services/movieService';
-import { uploadPoster, deletePoster } from '../services/storageService';
 import { useToast } from '../composables/useToast';
 import type { Movie, MovieFormSubmit, MovieUpdate } from '../types/movie';
 
@@ -55,7 +48,6 @@ const { showToast } = useToast();
 const movie = ref<Movie | null>(null);
 const loading = ref(true);
 const busy = ref(false);
-const progress = ref<number | null>(null);
 
 onMounted(async () => {
   const movieId = Number(route.params.id);
@@ -74,37 +66,18 @@ const handleSubmit = async (payload: MovieFormSubmit) => {
   if (!current) return;
 
   busy.value = true;
-  progress.value = null;
 
   const updates: MovieUpdate = { ...payload.data };
-  const previousPath = current.posterPath;
-  let uploadedPath: string | null = null;
+  if (payload.poster.action === 'replace') {
+    updates.posterUrl = payload.poster.dataUrl;
+  } else if (payload.poster.action === 'remove') {
+    // null rather than undefined: Realtime Database reads null as "delete this key".
+    updates.posterUrl = null;
+  }
 
   try {
-    if (payload.poster.action === 'replace') {
-      // Upload before touching the record. Nothing is at risk yet, so a failure here can
-      // simply leave the user on the form with their picture still attached.
-      progress.value = 0;
-      const { url, path } = await uploadPoster(payload.poster.file, current.id, percent => {
-        progress.value = percent;
-      });
-      updates.posterUrl = url;
-      updates.posterPath = path;
-      uploadedPath = path;
-    } else if (payload.poster.action === 'remove') {
-      // null rather than undefined: Realtime Database reads null as "delete this key".
-      updates.posterUrl = null;
-      updates.posterPath = null;
-    }
-
-    progress.value = null;
+    // Text and poster land in the same update, so the record is never half-changed.
     await movieService.updateMovie(current.id, updates);
-
-    // Only once the record points somewhere else is the old file safe to remove.
-    if (previousPath && previousPath !== uploadedPath && payload.poster.action !== 'keep') {
-      void deletePoster(previousPath);
-    }
-
     showToast('Movie updated.');
     router.push('/watchlist');
   } catch (error) {
@@ -113,7 +86,6 @@ const handleSubmit = async (payload: MovieFormSubmit) => {
     showToast(`Could not save your changes. ${reason}`, 'danger');
   } finally {
     busy.value = false;
-    progress.value = null;
   }
 };
 

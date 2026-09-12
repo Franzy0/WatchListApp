@@ -8,10 +8,18 @@ import type {
   FilterOption
 } from '../types/movie';
 import { database } from '../firebase/config';
-import { ref, set, onValue, remove, update, get, type Unsubscribe } from 'firebase/database';
-import { deletePoster } from './storageService';
+import {
+  ref,
+  set,
+  update,
+  remove,
+  onValue,
+  type DataSnapshot,
+  type Unsubscribe
+} from 'firebase/database';
 
 const MOVIES_REF = ref(database, 'movies');
+const movieRef = (id: number) => ref(database, `movies/${id}`);
 
 const sampleMovies: Movie[] = [
   {
@@ -68,6 +76,10 @@ const sampleMovies: Movie[] = [
  * what makes every computed built on top of it update on its own. The sync helpers below
  * read `movies.value`, so calling them from inside a computed registers the dependency
  * and the view re-renders whenever the database changes.
+ *
+ * It is also the only place records are read from. Posters travel on the record as data
+ * URLs, so a one-off `get` of a movie is a poster-sized download; the by-id helpers
+ * answer from this cache instead and never make that request.
  */
 const movies: Ref<Movie[]> = vueRef([]);
 const loading = vueRef(false);
@@ -107,6 +119,9 @@ const normalizeMovie = (raw: unknown): Movie => {
  * a plain object once they are sparse. The seeded records use ids 1-5, so the first read
  * of a fresh database arrives in array form with a null at index 0. Anything reading a
  * snapshot has to cope with both shapes.
+ *
+ * `isMovieLike` also drops stray scalar keys typed straight into the console under
+ * `/movies`, which would otherwise show up as broken cards.
  */
 const normalizeMovies = (value: unknown): Movie[] => {
   if (!value) return [];
@@ -136,18 +151,22 @@ const dropNulls = (input: Record<string, unknown>): Movie => {
   return out as unknown as Movie;
 };
 
-const initializeSampleData = async () => {
-  try {
-    const snapshot = await get(MOVIES_REF);
-    if (!snapshot.exists()) {
-      sampleMovies.forEach(movie => {
-        const movieRef = ref(database, `movies/${movie.id}`);
-        set(movieRef, movie);
-      });
-    }
-  } catch (error) {
-    console.error('Error initializing sample data:', error);
-  }
+/**
+ * Seed the sample list into an empty database.
+ *
+ * Decided from the first live snapshot rather than a separate `get`, which used to pull
+ * the entire list down a second time on every start. Written as one multi-path update
+ * so it is a single round trip and either lands whole or not at all.
+ */
+let seeded = false;
+const seedIfEmpty = (snapshot: DataSnapshot): void => {
+  if (seeded || snapshot.exists()) return;
+  seeded = true;
+
+  const payload = Object.fromEntries(sampleMovies.map(movie => [movie.id, movie]));
+  update(MOVIES_REF, payload).catch(error => {
+    console.error('Error seeding sample data:', error);
+  });
 };
 
 /**
@@ -162,6 +181,7 @@ const ensureSubscribed = (): Promise<void> => {
     unsubscribe = onValue(
       MOVIES_REF,
       snapshot => {
+        seedIfEmpty(snapshot);
         movies.value = normalizeMovies(snapshot.val());
         loading.value = false;
         loadError.value = null;
@@ -184,6 +204,12 @@ const ensureSubscribed = (): Promise<void> => {
   return firstLoad;
 };
 
+/** Find a record in the live cache, waiting for the first snapshot if it is still on its way. */
+const findCached = async (id: number): Promise<Movie | null> => {
+  await ensureSubscribed();
+  return movies.value.find(movie => movie.id === id) ?? null;
+};
+
 /** Tear the listener down. Used by hot reload and by tests, not by the running app. */
 export const stopMoviesSubscription = (): void => {
   unsubscribe?.();
@@ -192,7 +218,6 @@ export const stopMoviesSubscription = (): void => {
   movies.value = [];
 };
 
-initializeSampleData();
 ensureSubscribed();
 
 if (import.meta.hot) {
@@ -210,6 +235,7 @@ export const movieService = {
     return movies.value;
   },
 
+  /** One write. The poster, if any, is on the payload as `posterUrl` and lands with it. */
   addMovie: async (movie: Omit<Movie, 'id' | 'createdAt'>): Promise<Movie> => {
     const newMovie: Movie = {
       ...movie,
@@ -218,8 +244,7 @@ export const movieService = {
     };
 
     try {
-      const movieRef = ref(database, `movies/${newMovie.id}`);
-      await set(movieRef, stripUndefined(newMovie));
+      await set(movieRef(newMovie.id), stripUndefined(newMovie));
       return newMovie;
     } catch (error) {
       console.error('Error adding movie:', error);
@@ -229,36 +254,23 @@ export const movieService = {
 
   updateMovie: async (id: number, updates: MovieUpdate): Promise<Movie | null> => {
     try {
-      const movieRef = ref(database, `movies/${id}`);
-      const snapshot = await get(movieRef);
+      const existing = await findCached(id);
+      if (!existing) return null;
 
-      if (!snapshot.exists()) return null;
-
-      const existingMovie = snapshot.val() as Movie;
       const cleanUpdates = stripUndefined(updates);
+      await update(movieRef(id), cleanUpdates);
 
-      await update(movieRef, cleanUpdates);
-
-      return normalizeMovie(dropNulls({ ...existingMovie, ...cleanUpdates }));
+      return normalizeMovie(dropNulls({ ...existing, ...cleanUpdates }));
     } catch (error) {
       console.error('Error updating movie:', error);
       throw error;
     }
   },
 
-  deleteMovie: async (id: number): Promise<boolean> => {
+  /** Removing the record removes its poster with it; there is nothing else to clean up. */
+  deleteMovie: async (id: number): Promise<void> => {
     try {
-      const movieRef = ref(database, `movies/${id}`);
-      const snapshot = await get(movieRef);
-
-      if (!snapshot.exists()) return false;
-
-      const existing = snapshot.val() as Movie;
-      await remove(movieRef);
-
-      // Best effort. An orphaned image is not worth failing the delete over.
-      void deletePoster(existing.posterPath);
-      return true;
+      await remove(movieRef(id));
     } catch (error) {
       console.error('Error deleting movie:', error);
       throw error;
@@ -267,12 +279,7 @@ export const movieService = {
 
   getMovieById: async (id: number): Promise<Movie | null> => {
     try {
-      const movieRef = ref(database, `movies/${id}`);
-      const snapshot = await get(movieRef);
-
-      if (!snapshot.exists()) return null;
-
-      return normalizeMovie(snapshot.val());
+      return await findCached(id);
     } catch (error) {
       console.error('Error getting movie:', error);
       throw error;

@@ -48,8 +48,8 @@ import { ref, computed, onMounted } from 'vue';
 import { IonPage, IonContent, IonButton, IonIcon, IonSpinner } from '@ionic/vue';
 import { refreshOutline, cloudOfflineOutline, cloudDoneOutline } from 'ionicons/icons';
 import PageHeader from '../components/PageHeader.vue';
-import { database, isStorageConfigured } from '../firebase/config';
-import { ref as dbRef, get } from 'firebase/database';
+import { database } from '../firebase/config';
+import { ref as dbRef, get, query, limitToFirst } from 'firebase/database';
 
 interface ConnectionDetails {
   projectId: string;
@@ -89,7 +89,7 @@ const details = computed(() => [
   { label: 'Project ID', value: connectionDetails.value?.projectId ?? 'Unknown' },
   { label: 'Database URL', value: connectionDetails.value?.databaseUrl ?? 'Unknown' },
   { label: 'App ID', value: connectionDetails.value?.appId ?? 'Unknown' },
-  { label: 'Image storage', value: isStorageConfigured ? 'Configured' : 'Not configured' }
+  { label: 'Posters', value: 'Stored on each movie record (posterUrl)' }
 ]);
 
 const checkConnection = async () => {
@@ -99,7 +99,10 @@ const checkConnection = async () => {
   connectionDetails.value = null;
 
   try {
-    await get(dbRef(database, 'movies'));
+    // A real read, so a wrong URL or a denied rule surfaces here, but capped at one
+    // record. Posters ride along on records, so reading the whole list to check the
+    // connection would download every picture in the library.
+    await get(query(dbRef(database, 'movies'), limitToFirst(1)));
 
     isConnected.value = true;
     connectionDetails.value = {

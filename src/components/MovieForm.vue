@@ -40,9 +40,6 @@
       </div>
 
       <p v-if="posterError" class="field-error poster-error">{{ posterError }}</p>
-      <p v-else-if="!storageReady" class="field-note">
-        Pictures are turned off because Firebase Storage isn't configured.
-      </p>
     </div>
 
     <!-- Text fields. The caption is a property of the control in Ionic 9; the old
@@ -147,14 +144,9 @@
       </ion-segment>
     </div>
 
-    <div v-if="busy" class="upload-status">
-      <ion-progress-bar
-        :type="progress === null ? 'indeterminate' : 'determinate'"
-        :value="(progress ?? 0) / 100"
-      />
-      <span class="upload-text">
-        {{ progress === null ? 'Saving...' : `Uploading poster ${progress}%` }}
-      </span>
+    <div v-if="busy" class="save-status">
+      <ion-progress-bar type="indeterminate" />
+      <span class="save-text">Saving...</span>
     </div>
 
     <div class="form-actions">
@@ -176,7 +168,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, computed, onMounted, onBeforeUnmount, watch } from 'vue';
+import { ref, reactive, computed, onMounted, watch } from 'vue';
 import {
   IonInput,
   IonSelect,
@@ -198,8 +190,7 @@ import {
   closeOutline
 } from 'ionicons/icons';
 import { movieService } from '../services/movieService';
-import { isStorageConfigured } from '../firebase/config';
-import { usePhotoPicker, type PickedPhoto } from '../composables/usePhotoPicker';
+import { usePhotoPicker } from '../composables/usePhotoPicker';
 import type {
   Movie,
   MovieGenre,
@@ -212,8 +203,6 @@ interface Props {
   movie?: Movie;
   /** The page is saving. Disables the form and shows progress. */
   busy?: boolean;
-  /** Upload percentage, or null for an indeterminate save. */
-  progress?: number | null;
 }
 
 const props = defineProps<Props>();
@@ -226,9 +215,8 @@ const emit = defineEmits<{
 const MIN_YEAR = 1888;
 const genres = movieService.getGenres();
 const currentYear = new Date().getFullYear();
-const storageReady = isStorageConfigured;
 
-const { pickPhoto, releasePreview } = usePhotoPicker();
+const { pickPhoto } = usePhotoPicker();
 
 const formData = ref({
   title: '',
@@ -240,15 +228,16 @@ const formData = ref({
 
 // Poster state is kept out of formData. It is not a text field, and keeping it separate
 // is what lets the payload say plainly whether the picture should be kept, replaced or
-// cleared.
+// cleared. A picked photo is already the data URL that will be written to `posterUrl`,
+// so the preview shows exactly what will be saved.
 const existingPosterUrl = ref<string | null>(null);
-const pickedPhoto = ref<PickedPhoto | null>(null);
+const pickedPosterUrl = ref<string | null>(null);
 const posterRemoved = ref(false);
 const posterError = ref('');
 const picking = ref(false);
 
 const previewSrc = computed(() => {
-  if (pickedPhoto.value) return pickedPhoto.value.previewUrl;
+  if (pickedPosterUrl.value) return pickedPosterUrl.value;
   return posterRemoved.value ? null : existingPosterUrl.value;
 });
 
@@ -307,29 +296,18 @@ watch(
   }
 );
 
-const clearPicked = () => {
-  if (pickedPhoto.value) releasePreview(pickedPhoto.value.previewUrl);
-  pickedPhoto.value = null;
-};
-
 const removeGenre = (genre: MovieGenre) => {
   formData.value.genre = formData.value.genre.filter(g => g !== genre);
   touched.genre = true;
 };
 
 const handlePick = async () => {
-  if (!storageReady) {
-    posterError.value = "Firebase Storage isn't configured, so pictures can't be uploaded.";
-    return;
-  }
-
   posterError.value = '';
   picking.value = true;
   try {
-    const photo = await pickPhoto();
-    if (!photo) return; // Cancelled, which is not a failure.
-    clearPicked();
-    pickedPhoto.value = photo;
+    const dataUrl = await pickPhoto();
+    if (!dataUrl) return; // Cancelled, which is not a failure.
+    pickedPosterUrl.value = dataUrl;
     posterRemoved.value = false;
   } catch (error) {
     console.error('Could not pick a photo:', error);
@@ -341,7 +319,7 @@ const handlePick = async () => {
 };
 
 const handleRemovePoster = () => {
-  clearPicked();
+  pickedPosterUrl.value = null;
   posterRemoved.value = true;
   posterError.value = '';
 };
@@ -351,7 +329,7 @@ const handleSubmit = () => {
   if (Object.keys(errors.value).length > 0) return;
 
   let poster: PosterIntent = { action: 'keep' };
-  if (pickedPhoto.value) poster = { action: 'replace', file: pickedPhoto.value.blob };
+  if (pickedPosterUrl.value) poster = { action: 'replace', dataUrl: pickedPosterUrl.value };
   else if (posterRemoved.value) poster = { action: 'remove' };
 
   emit('submit', {
@@ -365,8 +343,6 @@ const handleSubmit = () => {
     poster
   });
 };
-
-onBeforeUnmount(clearPicked);
 </script>
 
 <style scoped>
@@ -474,8 +450,7 @@ onBeforeUnmount(clearPicked);
   font-size: var(--font-size-xs);
 }
 
-.poster-error,
-.field-note {
+.poster-error {
   text-align: center;
   margin: var(--spacing-xs) 0 0;
   font-size: var(--font-size-xs);
@@ -483,10 +458,6 @@ onBeforeUnmount(clearPicked);
 
 .field-error {
   color: var(--danger-text);
-}
-
-.field-note {
-  color: var(--text-tertiary);
 }
 
 /* Text fields */
@@ -564,11 +535,11 @@ ion-segment {
 }
 
 /* Progress */
-.upload-status {
+.save-status {
   margin-bottom: var(--spacing-lg);
 }
 
-.upload-text {
+.save-text {
   display: block;
   margin-top: var(--spacing-xs);
   font-size: var(--font-size-xs);

@@ -1,30 +1,32 @@
 /**
- * Canvas-based image downscaling.
+ * Canvas-based poster encoding.
  *
- * A phone photo is routinely 3-8 MB, far more than a poster thumbnail needs and slow to
- * upload over mobile data. Everything is re-encoded to a small JPEG before it ever
- * reaches Firebase Storage.
+ * A poster is stored on the movie record itself, as a JPEG data URL in `posterUrl`.
+ * That makes size matter twice over: every listener on `movies` downloads every poster,
+ * and Realtime Database meters that bandwidth. A phone photo is routinely 3-8 MB, so
+ * everything is re-encoded to a small JPEG before it is written.
  */
 
-export interface DownscaleOptions {
+export interface EncodeOptions {
   maxWidth?: number;
   maxHeight?: number;
-  /** JPEG quality, 0 to 1. */
+  /** JPEG quality, 0 to 1, tried first. Lower steps are used only if `maxLength` is missed. */
   quality?: number;
-  /** A JPEG already within bounds and under this many bytes is passed through. */
-  skipIfSmallerThan?: number;
+  /** Upper bound on the encoded data URL, in characters. */
+  maxLength?: number;
 }
 
-/** Movie posters are conventionally 2:3, which is what the card and detail views expect. */
-export const POSTER_ASPECT = 2 / 3;
-
 const DEFAULTS = {
-  // 600x900 covers a ~300px card at 2x pixel density and lands around 60-110 KB.
-  maxWidth: 600,
-  maxHeight: 900,
-  quality: 0.82,
-  skipIfSmallerThan: 150_000
+  // 480x720 fills a ~240px card at 2x pixel density and lands around 40-90 KB as JPEG.
+  // base64 then inflates that by a third, which is what the cap below is measured on.
+  maxWidth: 480,
+  maxHeight: 720,
+  quality: 0.8,
+  maxLength: 200_000
 };
+
+/** Quality steps to fall back through when the first encode is over the cap. */
+const QUALITY_STEPS = [0.7, 0.6, 0.5];
 
 const MAX_SOURCE_BYTES = 20 * 1024 * 1024;
 
@@ -33,7 +35,7 @@ const MAX_SOURCE_BYTES = 20 * 1024 * 1024;
  *
  * Capped at 1 so a small source is never blown up into a larger, worse file. Exported
  * separately because it is the only part of this module testable under jsdom, which
- * implements neither `createImageBitmap` nor `canvas.toBlob`.
+ * implements neither `createImageBitmap` nor `canvas.toDataURL`.
  */
 export const computeTargetSize = (
   width: number,
@@ -77,12 +79,24 @@ const sizeOf = (img: ImageBitmap | HTMLImageElement) =>
     ? { width: img.naturalWidth, height: img.naturalHeight }
     : { width: img.width, height: img.height };
 
-/** Re-encode an image as a JPEG that fits within the given bounds. */
-export const downscaleImage = async (
+/** Read a blob as a data URL as-is, without re-encoding it. */
+const readAsDataUrl = (blob: Blob): Promise<string> =>
+  new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result as string);
+    reader.onerror = () => reject(new Error('That image could not be read.'));
+    reader.readAsDataURL(blob);
+  });
+
+/**
+ * Encode an image as a JPEG data URL that fits within the given bounds and length cap,
+ * ready to be written straight into `posterUrl`.
+ */
+export const encodePoster = async (
   source: Blob,
-  options: DownscaleOptions = {}
-): Promise<Blob> => {
-  const { maxWidth, maxHeight, quality, skipIfSmallerThan } = { ...DEFAULTS, ...options };
+  options: EncodeOptions = {}
+): Promise<string> => {
+  const { maxWidth, maxHeight, quality, maxLength } = { ...DEFAULTS, ...options };
 
   if (source.type && !source.type.startsWith('image/')) {
     throw new Error('That file is not an image.');
@@ -95,16 +109,17 @@ export const downscaleImage = async (
   const { width: srcWidth, height: srcHeight } = sizeOf(img);
   const target = computeTargetSize(srcWidth, srcHeight, maxWidth, maxHeight);
 
-  // Re-encoding a picture that is already small only loses quality for no gain.
+  // A JPEG already within bounds and under the cap is passed through as it is.
+  // Re-encoding it would only lose quality for no gain. base64 is 4/3 of the bytes.
   const alreadyFine =
     source.type === 'image/jpeg' &&
-    source.size <= skipIfSmallerThan &&
+    Math.ceil(source.size / 3) * 4 <= maxLength &&
     target.width === srcWidth &&
     target.height === srcHeight;
 
   if (alreadyFine) {
     if (!(img instanceof HTMLImageElement)) img.close();
-    return source;
+    return readAsDataUrl(source);
   }
 
   const canvas = document.createElement('canvas');
@@ -118,18 +133,17 @@ export const downscaleImage = async (
   ctx.drawImage(img, 0, 0, target.width, target.height);
   if (!(img instanceof HTMLImageElement)) img.close();
 
-  return new Promise<Blob>((resolve, reject) => {
-    canvas.toBlob(
-      out => (out ? resolve(out) : reject(new Error('The image could not be compressed.'))),
-      'image/jpeg',
-      quality
-    );
-  });
-};
+  // Step the quality down until the result fits. The last step is accepted as it is:
+  // at 480x720 and quality 0.5 a JPEG is around 20 KB, so the cap is never really hit.
+  let encoded = '';
+  for (const step of [quality, ...QUALITY_STEPS.filter(q => q < quality)]) {
+    encoded = canvas.toDataURL('image/jpeg', step);
+    if (encoded.length <= maxLength) break;
+  }
 
-/** Rough byte size as readable text, used in the upload progress copy. */
-export const formatBytes = (bytes: number): string => {
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KB`;
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  // A tainted or over-sized canvas answers with the empty "data:," instead of throwing.
+  if (!encoded.startsWith('data:image/jpeg;base64,')) {
+    throw new Error('The image could not be compressed.');
+  }
+  return encoded;
 };

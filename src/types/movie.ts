@@ -8,10 +8,14 @@ export interface Movie {
   rating: number;
   status: 'Watched' | 'Not Watched';
   createdAt: string;
-  /** Firebase Storage download URL for the poster image. */
+  /**
+   * The poster itself, as a `data:image/jpeg;base64,...` URL.
+   *
+   * It lives on the record in Realtime Database rather than in a Storage bucket, so a
+   * movie and its picture are written and read together and `<img :src>` can show it
+   * with no further fetch. Kept small by `encodePoster` before it is ever written.
+   */
   posterUrl?: string;
-  /** Storage object path, kept so the old file can be removed when the poster changes. */
-  posterPath?: string;
 }
 
 /**
@@ -20,24 +24,22 @@ export interface Movie {
  * `null` means "clear this field", which is how Realtime Database deletes a key.
  * `undefined` means "leave it alone" and is stripped before the write.
  */
-export type MovieUpdate =
-  Partial<Omit<Movie, 'id' | 'createdAt' | 'posterUrl' | 'posterPath'>> & {
-    posterUrl?: string | null;
-    posterPath?: string | null;
-  };
+export type MovieUpdate = Partial<Omit<Movie, 'id' | 'createdAt' | 'posterUrl'>> & {
+  posterUrl?: string | null;
+};
 
 /** The editable fields of a movie, without anything the form does not own. */
-export type MovieFormData = Omit<Movie, 'id' | 'createdAt' | 'posterUrl' | 'posterPath'>;
+export type MovieFormData = Omit<Movie, 'id' | 'createdAt' | 'posterUrl'>;
 
-/** What the form wants done with the poster, decided by the page that owns the upload. */
+/** What the form wants done with the poster, decided by the page that owns the save. */
 export type PosterIntent =
   | { action: 'keep' }
-  | { action: 'replace'; file: Blob }
+  | { action: 'replace'; dataUrl: string }
   | { action: 'remove' };
 
 /**
- * The form stays a controlled component: it collects a picture but never uploads one,
- * so the page can own progress, ordering and which colour of toast to show.
+ * The form stays a controlled component: it collects a picture but never saves one,
+ * so the page can own ordering and which colour of toast to show.
  */
 export interface MovieFormSubmit {
   data: MovieFormData;

@@ -5,6 +5,9 @@ import { describe, expect, test, vi, beforeEach } from 'vitest';
  * These cover the defect that made the dashboard read zero: the movie cache was a plain
  * module variable, so a computed built on it had no reactive dependency, evaluated once
  * against an empty list and never ran again.
+ *
+ * The database mock deliberately has no `get`. Every read the service makes must come
+ * from the live listener, so a stray server round trip fails loudly here.
  */
 
 /** Captures the live listener so a test can push snapshots at it. */
@@ -14,11 +17,10 @@ let snapshotCallback: ((snapshot: { val: () => unknown; exists: () => boolean })
 const snapshotOf = (value: unknown) => ({ val: () => value, exists: () => value != null });
 
 vi.mock('firebase/database', () => ({
-  ref: vi.fn(() => ({})),
+  ref: vi.fn((_db: unknown, path?: string) => ({ path })),
   set: vi.fn(async () => undefined),
   update: vi.fn(async () => undefined),
   remove: vi.fn(async () => undefined),
-  get: vi.fn(async () => snapshotOf({ seeded: true })),
   onValue: vi.fn((_ref: unknown, next: typeof snapshotCallback) => {
     snapshotCallback = next;
     return () => undefined;
@@ -26,16 +28,11 @@ vi.mock('firebase/database', () => ({
 }));
 
 vi.mock('@/firebase/config', () => ({
-  database: {},
-  storage: {},
-  isStorageConfigured: true
-}));
-
-vi.mock('@/services/storageService', () => ({
-  deletePoster: vi.fn(async () => undefined)
+  database: {}
 }));
 
 const { movieService } = await import('@/services/movieService');
+const { set, update, remove } = await import('firebase/database');
 
 const movie = (id: number, over: Record<string, unknown> = {}) => ({
   id,
@@ -53,8 +50,14 @@ const push = (value: unknown) => {
   snapshotCallback(snapshotOf(value));
 };
 
+const lastPayload = (fn: typeof set | typeof update) =>
+  vi.mocked(fn).mock.calls.at(-1)?.[1] as Record<string, unknown>;
+
 beforeEach(() => {
   push({});
+  vi.mocked(set).mockClear();
+  vi.mocked(update).mockClear();
+  vi.mocked(remove).mockClear();
 });
 
 describe('movieService store', () => {
@@ -114,6 +117,14 @@ describe('movieService store', () => {
     await nextTick();
 
     expect(movieService.movies.value).toHaveLength(1);
+  });
+
+  test('ignores scalar keys typed into the console under /movies', async () => {
+    // A hand-made "schema" of empty fields next to a real record, as seen in the wild.
+    push({ title: '', genre: '', posterUrl: '', 42: movie(42) });
+    await nextTick();
+
+    expect(movieService.movies.value.map(m => m.id)).toEqual([42]);
   });
 
   test('widens a legacy single-string genre into an array', async () => {
@@ -180,33 +191,115 @@ describe('movieService store', () => {
   });
 });
 
-describe('writes', () => {
-  test('strips undefined so the database does not reject the payload', async () => {
-    const { set } = await import('firebase/database');
+describe('reads by id', () => {
+  test('getMovieById answers from the live cache, poster included', async () => {
+    const poster = 'data:image/jpeg;base64,AAAA';
+    push({ a: movie(1, { posterUrl: poster }) });
+    await nextTick();
 
+    // No `get` exists on the mock, so this can only succeed by reading the cache.
+    const found = await movieService.getMovieById(1);
+    expect(found?.title).toBe('Movie 1');
+    expect(found?.posterUrl).toBe(poster);
+  });
+
+  test('getMovieById is null for an id that is not there', async () => {
+    push({ a: movie(1) });
+    await nextTick();
+
+    await expect(movieService.getMovieById(2)).resolves.toBeNull();
+  });
+});
+
+describe('writes', () => {
+  test('addMovie writes the poster on the record in the same set', async () => {
+    const poster = 'data:image/jpeg;base64,AAAA';
+
+    await movieService.addMovie({
+      title: 'With poster',
+      genre: ['Drama'],
+      year: 2024,
+      rating: 7,
+      status: 'Not Watched',
+      posterUrl: poster
+    });
+
+    expect(set).toHaveBeenCalledTimes(1);
+    const payload = lastPayload(set);
+    expect(payload.posterUrl).toBe(poster);
+    expect(payload.title).toBe('With poster');
+    expect(typeof payload.id).toBe('number');
+  });
+
+  test('strips undefined so the database does not reject the payload', async () => {
     await movieService.addMovie({
       title: 'No poster',
       genre: ['Drama', 'Crime'],
       year: 2024,
       rating: 7,
       status: 'Not Watched',
-      posterUrl: undefined,
-      posterPath: undefined
+      posterUrl: undefined
     });
 
-    const payload = vi.mocked(set).mock.calls.at(-1)?.[1] as Record<string, unknown>;
+    const payload = lastPayload(set);
     expect('posterUrl' in payload).toBe(false);
-    expect('posterPath' in payload).toBe(false);
     expect(payload.title).toBe('No poster');
   });
 
-  test('keeps null, which is how the database clears a field', async () => {
-    const { update, get } = await import('firebase/database');
-    vi.mocked(get).mockResolvedValueOnce(snapshotOf(movie(1, { posterUrl: 'x' })) as never);
+  test('keeps null, which is how the database clears a poster', async () => {
+    push({ a: movie(1, { posterUrl: 'data:image/jpeg;base64,AAAA' }) });
+    await nextTick();
 
-    await movieService.updateMovie(1, { posterUrl: null, posterPath: null });
+    const result = await movieService.updateMovie(1, { posterUrl: null });
 
-    const payload = vi.mocked(update).mock.calls.at(-1)?.[1] as Record<string, unknown>;
-    expect(payload.posterUrl).toBeNull();
+    expect(lastPayload(update).posterUrl).toBeNull();
+    // The merged record handed back no longer carries the cleared field.
+    expect(result).not.toBeNull();
+    expect('posterUrl' in (result ?? {})).toBe(false);
+  });
+
+  test('updateMovie replaces the poster in the same update as the text fields', async () => {
+    push({ a: movie(1) });
+    await nextTick();
+
+    const poster = 'data:image/jpeg;base64,BBBB';
+    const result = await movieService.updateMovie(1, { title: 'Renamed', posterUrl: poster });
+
+    expect(update).toHaveBeenCalledTimes(1);
+    expect(lastPayload(update)).toEqual({ title: 'Renamed', posterUrl: poster });
+    expect(result?.posterUrl).toBe(poster);
+    expect(result?.title).toBe('Renamed');
+  });
+
+  test('updateMovie does not write for an unknown id', async () => {
+    push({ a: movie(1) });
+    await nextTick();
+
+    await expect(movieService.updateMovie(99, { title: 'x' })).resolves.toBeNull();
+    expect(update).not.toHaveBeenCalled();
+  });
+
+  test('deleteMovie removes the record with a single call', async () => {
+    await movieService.deleteMovie(7);
+
+    expect(remove).toHaveBeenCalledTimes(1);
+    expect((vi.mocked(remove).mock.calls[0][0] as { path: string }).path).toBe('movies/7');
+  });
+});
+
+describe('seeding', () => {
+  test('an empty database is seeded once, with one multi-path update', async () => {
+    push(null);
+    await nextTick();
+
+    expect(update).toHaveBeenCalledTimes(1);
+    const payload = lastPayload(update);
+    expect(Object.keys(payload).sort()).toEqual(['1', '2', '3', '4', '5']);
+    expect((payload['1'] as { title: string }).title).toBe('Interstellar');
+
+    // The listener fires again once the seed lands; that must not seed a second time.
+    push(null);
+    await nextTick();
+    expect(update).toHaveBeenCalledTimes(1);
   });
 });
