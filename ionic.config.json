@@ -1,0 +1,7 @@
+{
+  "name": "Watchlist_Movie_App",
+  "integrations": {
+    "capacitor": {}
+  },
+  "type": "vue-vite"
+}
