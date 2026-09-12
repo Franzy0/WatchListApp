@@ -1,6 +1,7 @@
 import { initializeApp } from "firebase/app";
 import { getAnalytics } from "firebase/analytics";
-import { getDatabase, connectDatabaseEmulator } from "firebase/database";
+import { getDatabase } from "firebase/database";
+import { getStorage } from "firebase/storage";
 
 const firebaseConfig = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
@@ -16,6 +17,13 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 const analytics = getAnalytics(app);
 const database = getDatabase(app);
+const storage = getStorage(app);
 
-export { app, analytics, database };
+/**
+ * `getStorage` does not throw on a missing bucket. The failure only surfaces later as
+ * `storage/no-default-bucket`, so the picker UI checks this up front and says so plainly
+ * instead of letting someone choose a photo that can never upload.
+ */
+const isStorageConfigured = Boolean(firebaseConfig.storageBucket);
 
+export { app, analytics, database, storage, isStorageConfigured };

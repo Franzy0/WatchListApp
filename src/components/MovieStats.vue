@@ -1,213 +1,145 @@
 <template>
   <div class="stats-container">
-    <ion-card class="stat-card total">
-      <div class="stat-icon">
-        <ion-icon :icon="filmOutline"></ion-icon>
-      </div>
-      <div class="stat-content">
-        <div class="stat-label">TOTAL MOVIES</div>
-        <div class="stat-value">{{ stats.total }}</div>
-      </div>
-    </ion-card>
-
-    <ion-card class="stat-card watched">
-      <div class="stat-icon">
-        <ion-icon :icon="checkmarkCircle"></ion-icon>
-      </div>
-      <div class="stat-content">
-        <div class="stat-label">WATCHED</div>
-        <div class="stat-value">{{ stats.watched }}</div>
-      </div>
-    </ion-card>
-
-    <ion-card class="stat-card to-watch">
-      <div class="stat-icon">
-        <ion-icon :icon="bookmarkOutline"></ion-icon>
-      </div>
-      <div class="stat-content">
-        <div class="stat-label">TO WATCH</div>
-        <div class="stat-value">{{ stats.notWatched }}</div>
-      </div>
-    </ion-card>
-
-    <ion-card class="stat-card rating">
-      <div class="stat-icon">
-        <ion-icon :icon="star"></ion-icon>
-      </div>
-      <div class="stat-content">
-        <div class="stat-label">AVG. RATING</div>
-        <div class="stat-value">{{ stats.avgRating }}</div>
-      </div>
-    </ion-card>
+    <button
+      v-for="tile in tiles"
+      :key="tile.key"
+      type="button"
+      class="stat-card"
+      :aria-label="`${tile.label}: ${tile.value}. Show these in the watchlist.`"
+      @click="$emit('tile-click', tile.key)"
+    >
+      <span class="icon-chip" :class="tile.chipClass">
+        <ion-icon :icon="tile.icon" />
+      </span>
+      <span class="stat-content">
+        <span class="stat-label">{{ tile.label }}</span>
+        <span class="stat-value">{{ tile.value }}</span>
+      </span>
+    </button>
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue';
-import { IonCard, IonIcon } from '@ionic/vue';
+import { computed } from 'vue';
+import { IonIcon } from '@ionic/vue';
 import { filmOutline, checkmarkCircle, bookmarkOutline, star } from 'ionicons/icons';
-import { movieService } from '../services/movieService';
+import type { MovieStats, StatKey } from '../types/movie';
 
-const stats = computed(() => movieService.getStats());
+interface Props {
+  stats: MovieStats;
+}
 
-onMounted(async () => {
-  try {
-    await movieService.getMovies();
-  } catch (error) {
-    console.error('Error loading stats:', error);
+const props = defineProps<Props>();
+
+defineEmits<{
+  (e: 'tile-click', key: StatKey): void;
+}>();
+
+// Stats arrive as a prop now. Fetching them here meant the tiles read a plain module
+// variable through a computed with no reactive dependency, so they showed zero forever.
+const tiles = computed(() => [
+  {
+    key: 'total' as StatKey,
+    label: 'Total Movies',
+    value: String(props.stats.total),
+    icon: filmOutline,
+    chipClass: 'icon-chip--primary'
+  },
+  {
+    key: 'watched' as StatKey,
+    label: 'Watched',
+    value: String(props.stats.watched),
+    icon: checkmarkCircle,
+    chipClass: 'icon-chip--success'
+  },
+  {
+    key: 'notWatched' as StatKey,
+    label: 'To Watch',
+    value: String(props.stats.notWatched),
+    icon: bookmarkOutline,
+    chipClass: 'icon-chip--warning'
+  },
+  {
+    key: 'avgRating' as StatKey,
+    label: 'Avg. Rating',
+    value: props.stats.avgRating,
+    icon: star,
+    chipClass: 'icon-chip--warning'
   }
-});
+]);
 </script>
 
 <style scoped>
 .stats-container {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-  gap: 20px;
-  margin-bottom: 32px;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: var(--spacing-md);
+  margin-bottom: var(--spacing-2xl);
 }
 
 .stat-card {
-  margin: 0;
-  padding: 24px;
   display: flex;
   align-items: center;
-  gap: 20px;
-  transition: transform var(--transition-normal), box-shadow var(--transition-normal);
+  gap: var(--spacing-md);
+  width: 100%;
+  padding: var(--spacing-md);
+  text-align: left;
+  background: var(--surface-1);
   border: 1px solid var(--border-color);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
+  cursor: pointer;
+  transition: transform var(--transition-normal), box-shadow var(--transition-normal),
+    border-color var(--transition-fast);
 }
 
 .stat-card:hover {
   transform: translateY(-3px);
   box-shadow: var(--shadow-lg);
+  border-color: var(--primary-color);
 }
 
-.stat-icon {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 56px;
-  height: 56px;
-  border-radius: var(--radius-md);
-  font-size: 1.75rem;
-  flex-shrink: 0;
-}
-
-.total .stat-icon {
-  background: rgba(229, 9, 20, 0.15);
-  color: var(--primary-color);
-}
-
-.watched .stat-icon {
-  background: rgba(70, 211, 105, 0.15);
-  color: var(--success-color);
-}
-
-.to-watch .stat-icon {
-  background: rgba(255, 160, 10, 0.15);
-  color: var(--warning-color);
-}
-
-.rating .stat-icon {
-  background: rgba(255, 160, 10, 0.15);
-  color: var(--warning-color);
+.stat-card:focus-visible {
+  outline: 2px solid var(--primary-color);
+  outline-offset: 2px;
 }
 
 .stat-content {
-  flex: 1;
+  display: flex;
+  flex-direction: column;
   min-width: 0;
 }
 
 .stat-label {
   font-size: var(--font-size-xs);
   font-weight: 600;
-  letter-spacing: 1.5px;
   color: var(--text-secondary);
-  margin-bottom: 6px;
+  letter-spacing: 0.6px;
   text-transform: uppercase;
 }
 
 .stat-value {
+  font-family: var(--font-display);
   font-size: var(--font-size-3xl);
   font-weight: 700;
   color: var(--text-primary);
   line-height: 1.1;
 }
 
-@media (min-width: 1024px) {
-  .stats-container {
-    grid-template-columns: repeat(4, 1fr);
-    gap: 24px;
-  }
-  
-  .stat-card {
-    padding: 28px;
-  }
-  
-  .stat-icon {
-    width: 64px;
-    height: 64px;
-    font-size: 2rem;
-  }
-  
-  .stat-label {
-    font-size: var(--font-size-sm);
-  }
-  
-  .stat-value {
-    font-size: var(--font-size-4xl);
-  }
-}
-
-@media (max-width: 768px) {
+@media (max-width: 767.98px) {
   .stats-container {
     grid-template-columns: repeat(2, 1fr);
-    gap: 16px;
-    margin-bottom: 24px;
+    gap: var(--spacing-sm);
   }
-  
+
   .stat-card {
-    padding: 20px;
+    --chip-size: 44px;
+    gap: var(--spacing-sm);
+    padding: var(--spacing-sm);
   }
-  
-  .stat-icon {
-    width: 48px;
-    height: 48px;
-    font-size: 1.5rem;
-  }
-  
-  .stat-label {
-    font-size: 0.75rem;
-    letter-spacing: 1px;
-  }
-  
+
   .stat-value {
     font-size: var(--font-size-2xl);
-  }
-}
-
-@media (max-width: 480px) {
-  .stats-container {
-    grid-template-columns: 1fr;
-    gap: 12px;
-  }
-  
-  .stat-card {
-    padding: 18px;
-  }
-  
-  .stat-icon {
-    width: 44px;
-    height: 44px;
-    font-size: 1.25rem;
-  }
-  
-  .stat-label {
-    font-size: 0.7rem;
-  }
-  
-  .stat-value {
-    font-size: var(--font-size-xl);
   }
 }
 </style>

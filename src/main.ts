@@ -3,6 +3,8 @@ import App from './App.vue'
 import router from './router';
 
 import { IonicVue } from '@ionic/vue';
+import { defineCustomElements } from '@ionic/pwa-elements/loader';
+import { initTheme } from './composables/useTheme';
 
 /* Core CSS required for Ionic components to work properly */
 import '@ionic/vue/css/core.css';
@@ -27,9 +29,10 @@ import '@ionic/vue/css/display.css';
  * https://ionicframework.com/docs/theming/dark-mode
  */
 
-/* @import '@ionic/vue/css/palettes/dark.always.css'; */
-/* @import '@ionic/vue/css/palettes/dark.class.css'; */
-import '@ionic/vue/css/palettes/dark.system.css';
+/* Class-driven rather than system-driven, so the in-app toggle can override the device
+ * setting. `useTheme` puts `.ion-palette-dark` on <html>; the boot script in index.html
+ * applies it before first paint. */
+import '@ionic/vue/css/palettes/dark.class.css';
 
 /* Theme variables */
 import './theme/variables.css';
@@ -37,6 +40,12 @@ import './theme/variables.css';
 const app = createApp(App)
   .use(IonicVue)
   .use(router);
+
+initTheme();
+
+// Supplies the camera and gallery UI when the app runs in a browser rather than on a
+// device. Already a dependency, previously never registered.
+defineCustomElements(window);
 
 router.isReady().then(() => {
   app.mount('#app');

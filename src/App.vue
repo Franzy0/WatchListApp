@@ -3,56 +3,54 @@
     <ion-menu menu-id="main-menu" content-id="main-content" type="overlay" :disabled="isMobile">
       <ion-content>
         <div class="menu-header">
-          <ion-icon :icon="filmOutline" class="menu-logo"></ion-icon>
+          <ion-icon :icon="filmOutline" class="menu-logo" />
           <h2 class="menu-title">CineList</h2>
         </div>
-        
+
         <ion-list lines="none">
-          <ion-item button :router-link="'/dashboard'" :class="{ 'menu-item-selected': currentPath === '/dashboard' }" @click="closeMenu">
-            <ion-icon slot="start" :icon="homeOutline"></ion-icon>
-            <ion-label>Dashboard</ion-label>
-          </ion-item>
-          
-          <ion-item button :router-link="'/watchlist'" :class="{ 'menu-item-selected': currentPath === '/watchlist' }" @click="closeMenu">
-            <ion-icon slot="start" :icon="listOutline"></ion-icon>
-            <ion-label>My Watchlist</ion-label>
-          </ion-item>
-          
-          <ion-item button :router-link="'/add'" :class="{ 'menu-item-selected': currentPath === '/add' }" @click="closeMenu">
-            <ion-icon slot="start" :icon="addCircleOutline"></ion-icon>
-            <ion-label>Add Movie</ion-label>
-          </ion-item>
-          
-          <ion-item button :router-link="'/firebase-status'" :class="{ 'menu-item-selected': currentPath === '/firebase-status' }" @click="closeMenu">
-            <ion-icon slot="start" :icon="cloudDoneOutline"></ion-icon>
-            <ion-label>Firebase Status</ion-label>
+          <ion-item
+            v-for="item in navItems"
+            :key="item.path"
+            button
+            :router-link="item.path"
+            :class="{ 'menu-item-selected': currentPath === item.path }"
+            @click="closeMenu"
+          >
+            <ion-icon slot="start" :icon="item.icon" />
+            <ion-label>{{ item.label }}</ion-label>
           </ion-item>
         </ion-list>
+
+        <!-- The toolbar toggle is the fast affordance; this one is the explanatory one.
+             It is desktop-only by virtue of the menu being disabled on mobile. -->
+        <div class="menu-footer">
+          <ion-item lines="none" class="theme-row">
+            <ion-icon slot="start" :icon="isDark ? moonOutline : sunnyOutline" />
+            <ion-toggle
+              :checked="isDark"
+              label-placement="start"
+              @ion-change="setPreference($event.detail.checked ? 'dark' : 'light')"
+            >
+              Dark theme
+            </ion-toggle>
+          </ion-item>
+        </div>
       </ion-content>
     </ion-menu>
-    
+
     <div class="ion-page" id="main-content">
-      <ion-router-outlet></ion-router-outlet>
-      
+      <ion-router-outlet />
+
       <ion-tab-bar v-if="isMobile" slot="bottom">
-        <ion-tab-button tab="dashboard" href="/dashboard" :selected="currentPath === '/dashboard'">
-          <ion-icon :icon="homeOutline"></ion-icon>
-          <ion-label>Dashboard</ion-label>
-        </ion-tab-button>
-        
-        <ion-tab-button tab="watchlist" href="/watchlist" :selected="currentPath === '/watchlist'">
-          <ion-icon :icon="listOutline"></ion-icon>
-          <ion-label>Watchlist</ion-label>
-        </ion-tab-button>
-        
-        <ion-tab-button tab="add" href="/add" :selected="currentPath === '/add'">
-          <ion-icon :icon="addCircleOutline"></ion-icon>
-          <ion-label>Add</ion-label>
-        </ion-tab-button>
-        
-        <ion-tab-button tab="firebase-status" href="/firebase-status" :selected="currentPath === '/firebase-status'">
-          <ion-icon :icon="cloudDoneOutline"></ion-icon>
-          <ion-label>Status</ion-label>
+        <ion-tab-button
+          v-for="item in navItems"
+          :key="item.path"
+          :tab="item.tab"
+          :href="item.path"
+          :selected="currentPath === item.path"
+        >
+          <ion-icon :icon="item.icon" />
+          <ion-label>{{ item.shortLabel }}</ion-label>
         </ion-tab-button>
       </ion-tab-bar>
     </div>
@@ -60,42 +58,46 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue';
+import { computed } from 'vue';
 import { useRoute } from 'vue-router';
-import { menuController } from '@ionic/vue';
-import { 
-  IonApp, 
-  IonMenu, 
-  IonContent, 
-  IonList, 
-  IonItem, 
-  IonIcon, 
+import {
+  menuController,
+  IonApp,
+  IonMenu,
+  IonContent,
+  IonList,
+  IonItem,
+  IonIcon,
   IonLabel,
+  IonToggle,
   IonTabBar,
   IonTabButton,
   IonRouterOutlet
 } from '@ionic/vue';
-import { 
-  filmOutline, 
-  homeOutline, 
-  listOutline, 
+import {
+  filmOutline,
+  homeOutline,
+  listOutline,
   addCircleOutline,
-  cloudDoneOutline
+  cloudDoneOutline,
+  sunnyOutline,
+  moonOutline
 } from 'ionicons/icons';
+import { useBreakpoint } from './composables/useBreakpoint';
+import { useTheme } from './composables/useTheme';
 
 const route = useRoute();
-const isMobile = ref(true);
+const { isMobile } = useBreakpoint();
+const { isDark, setPreference } = useTheme();
 
 const currentPath = computed(() => route.path);
 
-onMounted(() => {
-  checkScreenSize();
-  window.addEventListener('resize', checkScreenSize);
-});
-
-const checkScreenSize = () => {
-  isMobile.value = window.innerWidth < 768;
-};
+const navItems = [
+  { path: '/dashboard', tab: 'dashboard', label: 'Dashboard', shortLabel: 'Dashboard', icon: homeOutline },
+  { path: '/watchlist', tab: 'watchlist', label: 'My Watchlist', shortLabel: 'Watchlist', icon: listOutline },
+  { path: '/add', tab: 'add', label: 'Add Movie', shortLabel: 'Add', icon: addCircleOutline },
+  { path: '/firebase-status', tab: 'firebase-status', label: 'Firebase Status', shortLabel: 'Status', icon: cloudDoneOutline }
+];
 
 const closeMenu = async () => {
   await menuController.close();
@@ -103,53 +105,71 @@ const closeMenu = async () => {
 </script>
 
 <style scoped>
+/* The tab bar is used outside <ion-tabs>, so its slot="bottom" carries no meaning and it
+ * is simply the next flex child after the router outlet. The outlet is size-contained,
+ * which makes its intrinsic height zero, so without an explicit grow it collapses and
+ * the bar rides up over the page. */
+#main-content {
+  display: flex;
+  flex-direction: column;
+}
+
+#main-content > ion-router-outlet {
+  position: relative;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
 .menu-header {
   display: flex;
   align-items: center;
-  gap: 16px;
-  padding: 32px 24px;
+  gap: var(--spacing-md);
+  padding: var(--spacing-2xl) var(--spacing-xl);
   border-bottom: 1px solid var(--border-color);
 }
 
 .menu-logo {
-  font-size: 2.5rem;
+  font-size: 2.25rem;
   color: var(--primary-color);
 }
 
 .menu-title {
-  font-size: 1.75rem;
-  font-weight: 800;
+  font-family: var(--font-display);
+  font-size: var(--font-size-2xl);
+  font-weight: 700;
   color: var(--text-primary);
   margin: 0;
-  letter-spacing: -0.5px;
+  letter-spacing: 1px;
+  text-transform: uppercase;
 }
 
 ion-item {
-  --padding-start: 24px;
-  --padding-end: 24px;
-  --min-height: 64px;
-  margin: 6px 16px;
-  border-radius: var(--radius-md);
-  transition: background-color var(--transition-normal), transform var(--transition-fast);
+  --padding-start: var(--spacing-xl);
+  --padding-end: var(--spacing-xl);
+  --min-height: 60px;
   --background: transparent;
+  margin: 4px var(--spacing-md);
+  border-radius: var(--radius-md);
+  transition: background-color var(--transition-normal);
 }
 
 ion-item:hover {
-  --background: rgba(255, 255, 255, 0.05);
+  --background: var(--overlay-hover);
 }
 
 ion-item.menu-item-selected {
-  --background: rgba(229, 9, 20, 0.15);
-  color: var(--primary-color);
+  --background: rgba(var(--primary-color-rgb), var(--chip-alpha));
+  --color: var(--primary-text);
 }
 
 ion-item.menu-item-selected ion-icon,
 ion-item.menu-item-selected ion-label {
-  color: var(--primary-color);
+  color: var(--primary-text);
 }
 
 ion-item ion-icon {
-  font-size: 1.5rem;
+  font-size: 1.4rem;
+  color: var(--text-secondary);
 }
 
 ion-item ion-label {
@@ -157,10 +177,25 @@ ion-item ion-label {
   font-size: var(--font-size-md);
 }
 
+.menu-footer {
+  margin-top: var(--spacing-lg);
+  padding-top: var(--spacing-sm);
+  border-top: 1px solid var(--border-color);
+}
+
+.theme-row {
+  --min-height: 56px;
+}
+
+.theme-row ion-toggle {
+  width: 100%;
+  font-weight: 600;
+  font-size: var(--font-size-sm);
+}
+
 ion-tab-bar {
-  --background: var(--medium-color);
-  --border-color: var(--border-color);
   height: 64px;
+  padding-bottom: env(safe-area-inset-bottom);
 }
 
 ion-tab-button {
@@ -169,12 +204,12 @@ ion-tab-button {
 }
 
 ion-tab-button ion-icon {
-  font-size: 1.5rem;
-  margin-bottom: 4px;
+  font-size: 1.4rem;
+  margin-bottom: 2px;
 }
 
 ion-tab-button ion-label {
-  font-size: var(--font-size-sm);
+  font-size: 11px;
   font-weight: 600;
 }
 
@@ -184,30 +219,9 @@ ion-tab-button ion-label {
   }
 }
 
-@media (max-width: 768px) {
+@media (max-width: 767.98px) {
   .menu-header {
-    padding: 24px 20px;
-  }
-  
-  .menu-logo {
-    font-size: 2rem;
-  }
-  
-  .menu-title {
-    font-size: 1.5rem;
-  }
-  
-  ion-item {
-    --min-height: 56px;
-    margin: 4px 12px;
-  }
-  
-  ion-item ion-icon {
-    font-size: 1.25rem;
-  }
-  
-  ion-item ion-label {
-    font-size: var(--font-size-sm);
+    padding: var(--spacing-xl) var(--spacing-lg);
   }
 }
 </style>

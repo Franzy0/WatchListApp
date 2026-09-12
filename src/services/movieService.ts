@@ -1,6 +1,15 @@
-import type { Movie, MovieGenre, MovieStatus, SortOption, FilterOption } from '../types/movie';
+import { ref as vueRef, computed, type Ref } from 'vue';
+import type {
+  Movie,
+  MovieGenre,
+  MovieStats,
+  MovieUpdate,
+  SortOption,
+  FilterOption
+} from '../types/movie';
 import { database } from '../firebase/config';
-import { ref, set, push, onValue, remove, update, get } from 'firebase/database';
+import { ref, set, onValue, remove, update, get, type Unsubscribe } from 'firebase/database';
+import { deletePoster } from './storageService';
 
 const MOVIES_REF = ref(database, 'movies');
 
@@ -8,7 +17,7 @@ const sampleMovies: Movie[] = [
   {
     id: 1,
     title: 'Interstellar',
-    genre: 'Sci-Fi',
+    genre: ['Sci-Fi', 'Adventure'],
     year: 2014,
     rating: 8.7,
     status: 'Watched',
@@ -17,7 +26,7 @@ const sampleMovies: Movie[] = [
   {
     id: 2,
     title: 'Inception',
-    genre: 'Sci-Fi',
+    genre: ['Sci-Fi', 'Thriller'],
     year: 2010,
     rating: 8.8,
     status: 'Watched',
@@ -26,7 +35,7 @@ const sampleMovies: Movie[] = [
   {
     id: 3,
     title: 'The Dark Knight',
-    genre: 'Action',
+    genre: ['Action', 'Crime', 'Drama'],
     year: 2008,
     rating: 9.0,
     status: 'Watched',
@@ -35,7 +44,7 @@ const sampleMovies: Movie[] = [
   {
     id: 4,
     title: 'Spider-Man: No Way Home',
-    genre: 'Action',
+    genre: ['Action', 'Adventure'],
     year: 2021,
     rating: 8.2,
     status: 'Not Watched',
@@ -44,7 +53,7 @@ const sampleMovies: Movie[] = [
   {
     id: 5,
     title: 'Avatar',
-    genre: 'Adventure',
+    genre: ['Adventure', 'Sci-Fi'],
     year: 2009,
     rating: 7.8,
     status: 'Not Watched',
@@ -52,13 +61,85 @@ const sampleMovies: Movie[] = [
   }
 ];
 
-let cachedMovies: Movie[] = [];
+/**
+ * The single source of truth for the movie list.
+ *
+ * This is a module-scoped Vue ref fed by one live Realtime Database listener, which is
+ * what makes every computed built on top of it update on its own. The sync helpers below
+ * read `movies.value`, so calling them from inside a computed registers the dependency
+ * and the view re-renders whenever the database changes.
+ */
+const movies: Ref<Movie[]> = vueRef([]);
+const loading = vueRef(false);
+const loadError = vueRef<Error | null>(null);
+
+let unsubscribe: Unsubscribe | null = null;
+let firstLoad: Promise<void> | null = null;
+
+const isMovieLike = (entry: unknown): boolean =>
+  !!entry && typeof entry === 'object' && typeof (entry as Movie).id === 'number';
+
+/**
+ * Widen a stored record into the shape the app expects.
+ *
+ * `genre` was a single string before multi-select, and the database drops empty arrays
+ * entirely, so it can arrive as a string, an array or nothing at all. Reads are the one
+ * funnel every record passes through, which makes this the right place to even it out.
+ * Records are rewritten as arrays the next time they are saved; nothing is migrated in
+ * place.
+ */
+const normalizeMovie = (raw: unknown): Movie => {
+  const record = raw as Movie & { genre?: unknown };
+  const genre = record.genre;
+
+  return {
+    ...record,
+    genre: Array.isArray(genre)
+      ? (genre.filter(g => typeof g === 'string' && g) as MovieGenre[])
+      : typeof genre === 'string' && genre
+        ? [genre as MovieGenre]
+        : []
+  };
+};
+
+/**
+ * Realtime Database hands back an array with holes when the keys are dense integers, and
+ * a plain object once they are sparse. The seeded records use ids 1-5, so the first read
+ * of a fresh database arrives in array form with a null at index 0. Anything reading a
+ * snapshot has to cope with both shapes.
+ */
+const normalizeMovies = (value: unknown): Movie[] => {
+  if (!value) return [];
+  const raw = Array.isArray(value)
+    ? value
+    : Object.values(value as Record<string, unknown>);
+
+  return raw.filter(isMovieLike).map(normalizeMovie);
+};
+
+/**
+ * Realtime Database rejects any payload containing `undefined`, and an optional poster
+ * that was never set produces exactly that, so every write is filtered first.
+ *
+ * `null` is deliberately preserved. Realtime Database reads it as "delete this key",
+ * which is how clearing a poster works.
+ */
+const stripUndefined = <T extends object>(input: T): T =>
+  Object.fromEntries(Object.entries(input).filter(([, v]) => v !== undefined)) as T;
+
+/** Drop the nulls used as delete markers so the result still satisfies `Movie`. */
+const dropNulls = (input: Record<string, unknown>): Movie => {
+  const out: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(input)) {
+    if (value !== null) out[key] = value;
+  }
+  return out as unknown as Movie;
+};
 
 const initializeSampleData = async () => {
   try {
     const snapshot = await get(MOVIES_REF);
     if (!snapshot.exists()) {
-      const moviesRef = ref(database, 'movies');
       sampleMovies.forEach(movie => {
         const movieRef = ref(database, `movies/${movie.id}`);
         set(movieRef, movie);
@@ -69,25 +150,64 @@ const initializeSampleData = async () => {
   }
 };
 
+/**
+ * Attach the live listener exactly once. The returned promise settles on the first
+ * snapshot so callers can still await an initial load.
+ */
+const ensureSubscribed = (): Promise<void> => {
+  if (firstLoad) return firstLoad;
+
+  loading.value = true;
+  firstLoad = new Promise<void>((resolve, reject) => {
+    unsubscribe = onValue(
+      MOVIES_REF,
+      snapshot => {
+        movies.value = normalizeMovies(snapshot.val());
+        loading.value = false;
+        loadError.value = null;
+        resolve();
+      },
+      error => {
+        loading.value = false;
+        loadError.value = error;
+        // Clear the handles so a later call can retry rather than being stuck forever.
+        unsubscribe = null;
+        firstLoad = null;
+        reject(error);
+      }
+    );
+  });
+
+  // Keep an unawaited rejection from surfacing as an unhandled promise rejection. This
+  // deliberately does not reassign `firstLoad`, or callers would lose the error.
+  firstLoad.catch(() => undefined);
+  return firstLoad;
+};
+
+/** Tear the listener down. Used by hot reload and by tests, not by the running app. */
+export const stopMoviesSubscription = (): void => {
+  unsubscribe?.();
+  unsubscribe = null;
+  firstLoad = null;
+  movies.value = [];
+};
+
 initializeSampleData();
+ensureSubscribed();
+
+if (import.meta.hot) {
+  import.meta.hot.dispose(() => stopMoviesSubscription());
+}
 
 export const movieService = {
-  getMovies: (): Promise<Movie[]> => {
-    return new Promise((resolve, reject) => {
-      onValue(MOVIES_REF, (snapshot) => {
-        const data = snapshot.val();
-        if (data) {
-          const movies = Object.values(data).filter(m => m && typeof m === 'object') as Movie[];
-          cachedMovies = movies;
-          resolve(movies);
-        } else {
-          cachedMovies = [];
-          resolve([]);
-        }
-      }, (error) => {
-        reject(error);
-      }, { onlyOnce: true });
-    });
+  /** Live list. Reading this inside a computed makes that computed reactive. */
+  movies: computed(() => movies.value),
+  loading: computed(() => loading.value),
+  loadError: computed(() => loadError.value),
+
+  getMovies: async (): Promise<Movie[]> => {
+    await ensureSubscribed();
+    return movies.value;
   },
 
   addMovie: async (movie: Omit<Movie, 'id' | 'createdAt'>): Promise<Movie> => {
@@ -96,11 +216,10 @@ export const movieService = {
       id: Date.now(),
       createdAt: new Date().toISOString()
     };
-    
+
     try {
       const movieRef = ref(database, `movies/${newMovie.id}`);
-      await set(movieRef, newMovie);
-      cachedMovies.push(newMovie);
+      await set(movieRef, stripUndefined(newMovie));
       return newMovie;
     } catch (error) {
       console.error('Error adding movie:', error);
@@ -108,24 +227,19 @@ export const movieService = {
     }
   },
 
-  updateMovie: async (id: number, updates: Partial<Omit<Movie, 'id' | 'createdAt'>>): Promise<Movie | null> => {
+  updateMovie: async (id: number, updates: MovieUpdate): Promise<Movie | null> => {
     try {
       const movieRef = ref(database, `movies/${id}`);
       const snapshot = await get(movieRef);
-      
+
       if (!snapshot.exists()) return null;
-      
+
       const existingMovie = snapshot.val() as Movie;
-      const updatedMovie = { ...existingMovie, ...updates };
-      
-      await update(movieRef, updates);
-      
-      const index = cachedMovies.findIndex(m => m.id === id);
-      if (index !== -1) {
-        cachedMovies[index] = updatedMovie;
-      }
-      
-      return updatedMovie;
+      const cleanUpdates = stripUndefined(updates);
+
+      await update(movieRef, cleanUpdates);
+
+      return normalizeMovie(dropNulls({ ...existingMovie, ...cleanUpdates }));
     } catch (error) {
       console.error('Error updating movie:', error);
       throw error;
@@ -136,11 +250,14 @@ export const movieService = {
     try {
       const movieRef = ref(database, `movies/${id}`);
       const snapshot = await get(movieRef);
-      
+
       if (!snapshot.exists()) return false;
-      
+
+      const existing = snapshot.val() as Movie;
       await remove(movieRef);
-      cachedMovies = cachedMovies.filter(m => m.id !== id);
+
+      // Best effort. An orphaned image is not worth failing the delete over.
+      void deletePoster(existing.posterPath);
       return true;
     } catch (error) {
       console.error('Error deleting movie:', error);
@@ -152,10 +269,10 @@ export const movieService = {
     try {
       const movieRef = ref(database, `movies/${id}`);
       const snapshot = await get(movieRef);
-      
+
       if (!snapshot.exists()) return null;
-      
-      return snapshot.val() as Movie;
+
+      return normalizeMovie(snapshot.val());
     } catch (error) {
       console.error('Error getting movie:', error);
       throw error;
@@ -163,34 +280,34 @@ export const movieService = {
   },
 
   searchMovies: (query: string): Movie[] => {
-    if (!query) return cachedMovies;
+    if (!query) return movies.value;
     const lowerQuery = query.toLowerCase();
-    return cachedMovies.filter(movie => 
-      movie && 
+    return movies.value.filter(movie =>
+      movie &&
       (movie.title?.toLowerCase().includes(lowerQuery) ||
-      movie.genre?.toLowerCase().includes(lowerQuery) ||
+      movie.genre?.join(' ').toLowerCase().includes(lowerQuery) ||
       movie.year?.toString().includes(lowerQuery))
     );
   },
 
-  filterMovies: (movies: Movie[], filter: FilterOption): Movie[] => {
+  filterMovies: (list: Movie[], filter: FilterOption): Movie[] => {
     switch (filter) {
       case 'watched':
-        return movies.filter(m => m.status === 'Watched');
+        return list.filter(m => m.status === 'Watched');
       case 'not-watched':
-        return movies.filter(m => m.status === 'Not Watched');
+        return list.filter(m => m.status === 'Not Watched');
       default:
-        return movies;
+        return list;
     }
   },
 
-  filterByGenre: (movies: Movie[], genre: string): Movie[] => {
-    if (!genre || genre === 'all') return movies;
-    return movies.filter(m => m.genre === genre);
+  filterByGenre: (list: Movie[], genre: string): Movie[] => {
+    if (!genre || genre === 'all') return list;
+    return list.filter(m => m.genre.includes(genre as MovieGenre));
   },
 
-  sortMovies: (movies: Movie[], sort: SortOption): Movie[] => {
-    const sorted = [...movies];
+  sortMovies: (list: Movie[], sort: SortOption): Movie[] => {
+    const sorted = [...list];
     switch (sort) {
       case 'recent':
         return sorted.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
@@ -211,20 +328,22 @@ export const movieService = {
     }
   },
 
-  getStats: () => {
-    const movies = cachedMovies;
-    const total = movies.length;
-    const watched = movies.filter(m => m.status === 'Watched').length;
-    const notWatched = movies.filter(m => m.status === 'Not Watched').length;
-    const avgRating = total > 0 
-      ? (movies.reduce((sum, m) => sum + m.rating, 0) / total).toFixed(1)
+  getStats: (): MovieStats => {
+    const list = movies.value;
+    const total = list.length;
+    const watched = list.filter(m => m.status === 'Watched').length;
+    const notWatched = list.filter(m => m.status === 'Not Watched').length;
+    const avgRating = total > 0
+      ? (list.reduce((sum, m) => sum + m.rating, 0) / total).toFixed(1)
       : '0.0';
-    
+
     return { total, watched, notWatched, avgRating };
   },
 
   getRecentMovies: (limit: number = 5): Movie[] => {
-    return cachedMovies
+    // Copy before sorting. Sorting the live array in place would be a write to reactive
+    // state during render, which sends Vue into a recursive update loop.
+    return [...movies.value]
       .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
       .slice(0, limit);
   },
