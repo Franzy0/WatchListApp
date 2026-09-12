@@ -1,53 +1,41 @@
 <template>
   <ion-page>
-    <ion-header>
-      <ion-toolbar>
-        <ion-buttons slot="start">
-          <ion-back-button default-href="/dashboard"></ion-back-button>
-        </ion-buttons>
-        <ion-title>Firebase Connection</ion-title>
-      </ion-toolbar>
-    </ion-header>
+    <PageHeader title="Firebase Connection" back-href="/dashboard" />
 
     <ion-content :fullscreen="true">
-      <div class="status-container">
+      <div class="page-container page-container--narrow">
         <div class="status-card">
-          <div class="status-icon" :class="connectionStatusClass">
-            <ion-icon :icon="statusIcon" size="large"></ion-icon>
+          <div class="icon-chip status-icon" :class="statusChipClass">
+            <ion-icon :icon="statusIcon" />
           </div>
-          
+
           <h2 class="status-title">{{ statusTitle }}</h2>
           <p class="status-message">{{ statusMessage }}</p>
-          
+
           <div v-if="isChecking" class="loading-section">
-            <ion-spinner name="crescent"></ion-spinner>
+            <ion-spinner name="crescent" />
             <p>Checking connection...</p>
           </div>
-          
-          <ion-button 
-            v-if="!isChecking" 
-            expand="block" 
-            @click="checkConnection"
+
+          <ion-button
+            v-else
+            expand="block"
+            color="primary"
             class="check-btn"
+            @click="checkConnection"
           >
-            <ion-icon slot="start" :icon="refreshOutline"></ion-icon>
+            <ion-icon slot="start" :icon="refreshOutline" />
             Check Connection
           </ion-button>
-          
-          <div v-if="connectionDetails" class="details-section">
-            <h3>Connection Details</h3>
-            <div class="detail-item">
-              <span class="detail-label">Project ID:</span>
-              <span class="detail-value">{{ connectionDetails.projectId }}</span>
-            </div>
-            <div class="detail-item">
-              <span class="detail-label">Database URL:</span>
-              <span class="detail-value">{{ connectionDetails.databaseUrl }}</span>
-            </div>
-            <div class="detail-item">
-              <span class="detail-label">App ID:</span>
-              <span class="detail-value">{{ connectionDetails.appId }}</span>
-            </div>
+
+          <div class="details-section">
+            <h3 class="details-title">Connection Details</h3>
+            <dl class="details-list">
+              <div v-for="row in details" :key="row.label" class="detail-item">
+                <dt class="detail-label">{{ row.label }}</dt>
+                <dd class="detail-value">{{ row.value }}</dd>
+              </div>
+            </dl>
           </div>
         </div>
       </div>
@@ -57,56 +45,52 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue';
-import {
-  IonPage,
-  IonHeader,
-  IonToolbar,
-  IonTitle,
-  IonButtons,
-  IonBackButton,
-  IonContent,
-  IonButton,
-  IonIcon,
-  IonSpinner
-} from '@ionic/vue';
-import { 
-  checkmarkCircle, 
-  closeCircle, 
-  refreshOutline,
-  cloudOfflineOutline,
-  cloudDoneOutline
-} from 'ionicons/icons';
-import { database } from '../firebase/config';
+import { IonPage, IonContent, IonButton, IonIcon, IonSpinner } from '@ionic/vue';
+import { refreshOutline, cloudOfflineOutline, cloudDoneOutline } from 'ionicons/icons';
+import PageHeader from '../components/PageHeader.vue';
+import { database, isStorageConfigured } from '../firebase/config';
 import { ref as dbRef, get } from 'firebase/database';
+
+interface ConnectionDetails {
+  projectId: string;
+  databaseUrl: string;
+  appId: string;
+}
 
 const isChecking = ref(false);
 const isConnected = ref(false);
 const errorMessage = ref('');
-const connectionDetails = ref<any>(null);
+const connectionDetails = ref<ConnectionDetails | null>(null);
 
 const statusIcon = computed(() => {
   if (isChecking.value) return refreshOutline;
-  if (isConnected.value) return cloudDoneOutline;
-  return cloudOfflineOutline;
+  return isConnected.value ? cloudDoneOutline : cloudOfflineOutline;
 });
 
-const connectionStatusClass = computed(() => {
-  if (isChecking.value) return 'checking';
-  if (isConnected.value) return 'connected';
-  return 'disconnected';
+const statusChipClass = computed(() => {
+  if (isChecking.value) return 'icon-chip--warning';
+  return isConnected.value ? 'icon-chip--success' : 'icon-chip--danger';
 });
 
 const statusTitle = computed(() => {
   if (isChecking.value) return 'Checking...';
-  if (isConnected.value) return 'Connected to Firebase';
-  return 'Connection Failed';
+  return isConnected.value ? 'Connected to Firebase' : 'Connection Failed';
 });
 
 const statusMessage = computed(() => {
   if (isChecking.value) return 'Please wait while we verify your Firebase connection.';
-  if (isConnected.value) return 'Your app is successfully connected to Firebase Realtime Database.';
+  if (isConnected.value) {
+    return 'Your app is successfully connected to Firebase Realtime Database.';
+  }
   return errorMessage.value || 'Unable to connect to Firebase. Please check your configuration.';
 });
+
+const details = computed(() => [
+  { label: 'Project ID', value: connectionDetails.value?.projectId ?? 'Unknown' },
+  { label: 'Database URL', value: connectionDetails.value?.databaseUrl ?? 'Unknown' },
+  { label: 'App ID', value: connectionDetails.value?.appId ?? 'Unknown' },
+  { label: 'Image storage', value: isStorageConfigured ? 'Configured' : 'Not configured' }
+]);
 
 const checkConnection = async () => {
   isChecking.value = true;
@@ -115,131 +99,105 @@ const checkConnection = async () => {
   connectionDetails.value = null;
 
   try {
-    const testRef = dbRef(database, 'movies');
-    const snapshot = await get(testRef);
-    
+    await get(dbRef(database, 'movies'));
+
     isConnected.value = true;
     connectionDetails.value = {
       projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
       databaseUrl: import.meta.env.VITE_FIREBASE_DATABASE_URL,
       appId: import.meta.env.VITE_FIREBASE_APP_ID
     };
-  } catch (error: any) {
+  } catch (error) {
     isConnected.value = false;
-    errorMessage.value = error.message || 'Unknown error occurred while checking connection.';
+    errorMessage.value =
+      error instanceof Error
+        ? error.message
+        : 'Unknown error occurred while checking connection.';
     console.error('Firebase connection error:', error);
   } finally {
     isChecking.value = false;
   }
 };
 
-onMounted(() => {
-  checkConnection();
-});
+onMounted(checkConnection);
 </script>
 
 <style scoped>
-.status-container {
-  padding: 24px;
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  min-height: calc(100vh - 56px);
-}
-
 .status-card {
-  background: var(--medium-color);
-  border-radius: var(--radius-lg);
-  padding: 32px;
-  max-width: 500px;
-  width: 100%;
-  text-align: center;
+  background: var(--surface-1);
   border: 1px solid var(--border-color);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-md);
+  padding: var(--spacing-2xl) var(--spacing-xl);
+  text-align: center;
 }
 
 .status-icon {
-  width: 80px;
-  height: 80px;
-  margin: 0 auto 24px;
+  --chip-size: 80px;
   border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 2.5rem;
-}
-
-.status-icon.checking {
-  background: rgba(255, 160, 10, 0.15);
-  color: var(--warning-color);
-}
-
-.status-icon.connected {
-  background: rgba(70, 211, 105, 0.15);
-  color: var(--success-color);
-}
-
-.status-icon.disconnected {
-  background: rgba(229, 9, 20, 0.15);
-  color: var(--danger-color);
+  margin: 0 auto var(--spacing-lg);
 }
 
 .status-title {
-  font-size: 1.5rem;
+  font-family: var(--font-display);
+  font-size: var(--font-size-2xl);
   font-weight: 700;
   color: var(--text-primary);
-  margin-bottom: 12px;
+  margin: 0 0 var(--spacing-xs);
+  letter-spacing: 0.3px;
 }
 
 .status-message {
-  font-size: 1rem;
+  font-size: var(--font-size-base);
   color: var(--text-secondary);
-  margin-bottom: 24px;
-  line-height: 1.6;
+  margin: 0 0 var(--spacing-xl);
+  line-height: 1.55;
 }
 
 .loading-section {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 12px;
-  margin-bottom: 24px;
-}
-
-.loading-section ion-spinner {
-  color: var(--primary-color);
+  gap: var(--spacing-xs);
+  margin-bottom: var(--spacing-lg);
 }
 
 .loading-section p {
+  font-size: var(--font-size-sm);
   color: var(--text-secondary);
   margin: 0;
 }
 
 .check-btn {
   --border-radius: var(--radius-md);
+  min-height: var(--button-height-mobile);
   font-weight: 600;
-  letter-spacing: 0.5px;
-  margin-bottom: 32px;
 }
 
 .details-section {
-  text-align: left;
-  padding-top: 24px;
+  margin-top: var(--spacing-xl);
+  padding-top: var(--spacing-lg);
   border-top: 1px solid var(--border-color);
+  text-align: left;
 }
 
-.details-section h3 {
-  font-size: 1rem;
-  font-weight: 600;
+.details-title {
+  font-size: var(--font-size-base);
+  font-weight: 700;
   color: var(--text-primary);
-  margin-bottom: 16px;
+  margin: 0 0 var(--spacing-sm);
+}
+
+.details-list {
+  margin: 0;
 }
 
 .detail-item {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 12px 0;
-  border-bottom: 1px solid var(--border-color);
+  display: grid;
+  grid-template-columns: 120px 1fr;
+  gap: var(--spacing-sm);
+  padding: var(--spacing-xs) 0;
+  border-bottom: 1px solid var(--border-color-light);
 }
 
 .detail-item:last-child {
@@ -247,48 +205,30 @@ onMounted(() => {
 }
 
 .detail-label {
-  font-size: 0.85rem;
+  font-size: var(--font-size-xs);
   color: var(--text-secondary);
-  font-weight: 500;
-}
-
-.detail-value {
-  font-size: 0.85rem;
-  color: var(--text-primary);
   font-weight: 600;
-  text-align: right;
-  max-width: 60%;
-  word-break: break-all;
+  margin: 0;
 }
 
-@media (max-width: 768px) {
-  .status-container {
-    padding: 16px;
-  }
-  
+/* These are identifiers and URLs, which are far easier to scan in a monospace face
+   than broken mid-word across a proportional one. */
+.detail-value {
+  font-family: ui-monospace, 'SFMono-Regular', 'Roboto Mono', Menlo, monospace;
+  font-size: var(--font-size-xs);
+  color: var(--text-primary);
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 767.98px) {
   .status-card {
-    padding: 24px;
+    padding: var(--spacing-xl) var(--spacing-md);
   }
-  
-  .status-icon {
-    width: 64px;
-    height: 64px;
-    font-size: 2rem;
-  }
-  
-  .status-title {
-    font-size: 1.25rem;
-  }
-  
+
   .detail-item {
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 4px;
-  }
-  
-  .detail-value {
-    text-align: left;
-    max-width: 100%;
+    grid-template-columns: 1fr;
+    gap: 2px;
   }
 }
 </style>

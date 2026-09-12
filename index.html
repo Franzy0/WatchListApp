@@ -2,7 +2,7 @@
 <html lang="en">
   <head>
     <meta charset="utf-8" />
-    <title>Ionic App</title>
+    <title>CineList</title>
 
     <base href="/" />
 
@@ -18,8 +18,35 @@
 
     <!-- add to homescreen for ios -->
     <meta name="mobile-web-app-capable" content="yes" />
-    <meta name="apple-mobile-web-app-title" content="Ionic App" />
+    <meta name="apple-mobile-web-app-title" content="CineList" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black" />
+
+    <!--
+      Apply the saved theme before anything paints.
+
+      This has to be a plain inline script, not the module bundle: a module script is
+      deferred and runs after first paint, which is exactly when the wrong-colour flash
+      would happen. The storage key is mirrored in src/composables/useTheme.ts.
+    -->
+    <script>
+      (function () {
+        try {
+          var saved = localStorage.getItem('cinelist:theme');
+          var dark =
+            saved === 'dark' ||
+            ((!saved || saved === 'system') &&
+              window.matchMedia('(prefers-color-scheme: dark)').matches);
+          var root = document.documentElement;
+          root.classList.toggle('ion-palette-dark', dark);
+          root.style.colorScheme = dark ? 'dark' : 'light';
+          // Covers the gap between parsing the HTML and applying the stylesheet, which
+          // would otherwise paint the browser default white.
+          root.style.backgroundColor = dark ? '#0B0B0B' : '#F6F7F9';
+        } catch (e) {
+          /* localStorage can throw in some WebView privacy modes. */
+        }
+      })();
+    </script>
   </head>
 
   <body>

@@ -1,81 +1,83 @@
 <template>
   <ion-page>
-    <ion-header>
-      <ion-toolbar>
-        <ion-buttons slot="start">
-          <ion-menu-button menu="main-menu"></ion-menu-button>
-        </ion-buttons>
-        <ion-title>My Watchlist</ion-title>
-        <ion-buttons slot="end">
-          <ion-button @click="showSortMenu = true">
-            <ion-icon slot="icon-only" :icon="funnelOutline"></ion-icon>
-          </ion-button>
-        </ion-buttons>
-      </ion-toolbar>
-    </ion-header>
+    <PageHeader title="My Watchlist">
+      <template #end>
+        <ion-button aria-label="Sort movies" @click="showSortMenu = true">
+          <ion-icon slot="icon-only" :icon="funnelOutline" />
+        </ion-button>
+      </template>
+    </PageHeader>
 
     <ion-content :fullscreen="true">
-      <div class="watchlist-container">
-        <ion-searchbar 
-          v-model="searchQuery" 
-          placeholder="Search by title, genre, or year..."
-          animated
-          class="search-bar"
-        ></ion-searchbar>
+      <div class="page-container page-container--has-fab">
+        <div class="filter-bar glass-surface">
+          <ion-searchbar
+            v-model="searchQuery"
+            placeholder="Search by title, genre, or year..."
+            animated
+            class="search-bar"
+          />
 
-        <div class="filters-section">
-          <ion-segment v-model="statusFilter" mode="ios">
-            <ion-segment-button value="all">
-              <ion-label>All</ion-label>
-            </ion-segment-button>
-            <ion-segment-button value="watched">
-              <ion-label>Watched</ion-label>
-            </ion-segment-button>
-            <ion-segment-button value="not-watched">
-              <ion-label>To Watch</ion-label>
-            </ion-segment-button>
-          </ion-segment>
+          <div class="filters-section">
+            <ion-segment v-model="statusFilter" mode="ios">
+              <ion-segment-button value="all">
+                <ion-label>All</ion-label>
+              </ion-segment-button>
+              <ion-segment-button value="watched">
+                <ion-label>Watched</ion-label>
+              </ion-segment-button>
+              <ion-segment-button value="not-watched">
+                <ion-label>To Watch</ion-label>
+              </ion-segment-button>
+            </ion-segment>
 
-          <ion-select 
-            v-model="genreFilter" 
-            placeholder="Filter by genre"
-            interface="popover"
-            class="genre-select"
-          >
-            <ion-select-option value="all">All Genres</ion-select-option>
-            <ion-select-option 
-              v-for="genre in genres" 
-              :key="genre" 
-              :value="genre"
+            <ion-select
+              v-model="genreFilter"
+              label="Genre"
+              label-placement="stacked"
+              placeholder="All Genres"
+              interface="popover"
+              class="genre-select"
             >
-              {{ genre }}
-            </ion-select-option>
-          </ion-select>
+              <ion-select-option value="all">All Genres</ion-select-option>
+              <ion-select-option v-for="genre in genres" :key="genre" :value="genre">
+                {{ genre }}
+              </ion-select-option>
+            </ion-select>
+          </div>
         </div>
 
-        <div v-if="filteredMovies.length > 0" class="movies-grid">
-          <MovieCard 
-            v-for="movie in filteredMovies.filter(m => m && typeof m === 'object')" 
-            :key="movie.id" 
+        <p class="result-count">
+          {{ filteredMovies.length }} of {{ totalCount }}
+          {{ totalCount === 1 ? 'movie' : 'movies' }}
+        </p>
+
+        <div v-if="filteredMovies.length > 0" class="movie-grid">
+          <MovieCard
+            v-for="movie in filteredMovies"
+            :key="movie.id"
             :movie="movie"
+            @click="handleOpen"
             @edit="handleEdit"
             @delete="handleDelete"
           />
         </div>
 
-        <EmptyState 
-          v-else 
-          :title="searchQuery ? 'No movies found' : 'Your watchlist is empty'"
-          :message="searchQuery ? 'Try adjusting your search or filters.' : 'Start building your movie collection by adding your first movie.'"
+        <EmptyState
+          v-else
+          :icon="emptyState.icon"
+          :title="emptyState.title"
+          :message="emptyState.message"
+          :show-add-button="emptyState.showAdd"
           @add-movie="goToAddMovie"
         />
-
-        <ion-fab vertical="bottom" horizontal="end" slot="fixed">
-          <ion-fab-button color="primary" @click="goToAddMovie">
-            <ion-icon :icon="addOutline"></ion-icon>
-          </ion-fab-button>
-        </ion-fab>
       </div>
+
+      <ion-fab vertical="bottom" horizontal="end" slot="fixed">
+        <ion-fab-button color="primary" aria-label="Add a movie" @click="goToAddMovie">
+          <ion-icon :icon="addOutline" />
+        </ion-fab-button>
+      </ion-fab>
     </ion-content>
 
     <ion-action-sheet
@@ -83,22 +85,17 @@
       header="Sort By"
       :buttons="sortButtons"
       @did-dismiss="showSortMenu = false"
-    ></ion-action-sheet>
+    />
   </ion-page>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, onMounted } from 'vue';
-import { useRouter } from 'vue-router';
+import { ref, computed, watch, onMounted, nextTick } from 'vue';
+import { useRouter, useRoute } from 'vue-router';
 import {
   IonPage,
-  IonHeader,
-  IonToolbar,
-  IonTitle,
-  IonButtons,
-  IonMenuButton,
-  IonButton,
   IonContent,
+  IonButton,
   IonSearchbar,
   IonSegment,
   IonSegmentButton,
@@ -108,17 +105,40 @@ import {
   IonFab,
   IonFabButton,
   IonIcon,
-  IonActionSheet,
-  toastController,
-  alertController
+  IonActionSheet
 } from '@ionic/vue';
-import { funnelOutline, addOutline } from 'ionicons/icons';
+import {
+  funnelOutline,
+  addOutline,
+  timeOutline,
+  textOutline,
+  starOutline,
+  calendarOutline,
+  searchOutline,
+  checkmarkCircleOutline,
+  bookmarkOutline
+} from 'ionicons/icons';
+import PageHeader from '../components/PageHeader.vue';
 import MovieCard from '../components/MovieCard.vue';
 import EmptyState from '../components/EmptyState.vue';
 import { movieService } from '../services/movieService';
+import { useToast } from '../composables/useToast';
+import { useConfirmDelete } from '../composables/useConfirmDelete';
 import type { Movie, FilterOption, SortOption } from '../types/movie';
 
+/*
+ * URL contract, so the dashboard stat tiles can deep-link into a filtered view:
+ *   ?status=all|watched|not-watched     ?genre=<MovieGenre>|all
+ *   ?sort=recent|title-asc|...          ?q=<free text>
+ * The values are the same strings as the FilterOption and SortOption unions, so nothing
+ * has to be translated on the way in or out.
+ */
+
 const router = useRouter();
+const route = useRoute();
+const { showToast } = useToast();
+const { confirmDelete } = useConfirmDelete();
+
 const searchQuery = ref('');
 const statusFilter = ref<FilterOption>('all');
 const genreFilter = ref('all');
@@ -127,222 +147,215 @@ const showSortMenu = ref(false);
 
 const genres = movieService.getGenres();
 
-onMounted(async () => {
-  try {
-    await movieService.getMovies();
-  } catch (error) {
+const STATUSES: FilterOption[] = ['all', 'watched', 'not-watched'];
+const SORTS: SortOption[] = [
+  'recent',
+  'title-asc',
+  'title-desc',
+  'rating-desc',
+  'rating-asc',
+  'year-desc',
+  'year-asc'
+];
+
+// Guards the two-way binding below from chasing its own tail.
+let syncing = false;
+
+const syncFromQuery = () => {
+  const { status, genre, sort, q } = route.query;
+
+  // Never trust the URL: anything unrecognised falls back to the default.
+  statusFilter.value = STATUSES.includes(status as FilterOption)
+    ? (status as FilterOption)
+    : 'all';
+  sortOption.value = SORTS.includes(sort as SortOption) ? (sort as SortOption) : 'recent';
+  genreFilter.value =
+    typeof genre === 'string' && (genre === 'all' || genres.includes(genre as never))
+      ? genre
+      : 'all';
+  searchQuery.value = typeof q === 'string' ? q : '';
+};
+
+const applyQuery = () => {
+  const query: Record<string, string> = {};
+  if (statusFilter.value !== 'all') query.status = statusFilter.value;
+  if (genreFilter.value !== 'all') query.genre = genreFilter.value;
+  if (sortOption.value !== 'recent') query.sort = sortOption.value;
+  if (searchQuery.value) query.q = searchQuery.value;
+
+  // replace, not push: otherwise every keystroke in the search box becomes a history
+  // entry and the Android back button turns into a typing undo.
+  router.replace({ path: '/watchlist', query });
+};
+
+onMounted(() => {
+  syncFromQuery();
+
+  movieService.getMovies().catch(error => {
     console.error('Error loading movies:', error);
+    showToast('Could not reach the movie database.', 'danger');
+  });
+});
+
+// Navigating here from an already-mounted watchlist reuses the component, so onMounted
+// alone would silently ignore the second stat-tile tap.
+watch(
+  () => route.query,
+  async () => {
+    if (syncing || route.path !== '/watchlist') return;
+    syncing = true;
+    syncFromQuery();
+    await nextTick();
+    syncing = false;
   }
+);
+
+watch([searchQuery, statusFilter, genreFilter, sortOption], async () => {
+  if (syncing) return;
+  syncing = true;
+  applyQuery();
+  await nextTick();
+  syncing = false;
+});
+
+const totalCount = computed(() => movieService.movies.value.length);
+
+const filteredMovies = computed(() => {
+  let list = movieService.searchMovies(searchQuery.value);
+  list = movieService.filterMovies(list, statusFilter.value);
+  list = movieService.filterByGenre(list, genreFilter.value);
+  return movieService.sortMovies(list, sortOption.value);
+});
+
+/** A filtered view with no results is not the same as an empty collection. */
+const emptyState = computed(() => {
+  if (searchQuery.value) {
+    return {
+      icon: searchOutline,
+      title: 'No movies found',
+      message: `Nothing matches "${searchQuery.value}". Try a different search.`,
+      showAdd: false
+    };
+  }
+  if (statusFilter.value === 'watched') {
+    return {
+      icon: checkmarkCircleOutline,
+      title: 'Nothing watched yet',
+      message: "You haven't marked any movies as watched.",
+      showAdd: false
+    };
+  }
+  if (statusFilter.value === 'not-watched') {
+    return {
+      icon: bookmarkOutline,
+      title: 'All caught up',
+      message: "You've watched everything on your list.",
+      showAdd: false
+    };
+  }
+  if (genreFilter.value !== 'all') {
+    return {
+      icon: searchOutline,
+      title: `No ${genreFilter.value} movies`,
+      message: 'Nothing in your collection matches this genre.',
+      showAdd: false
+    };
+  }
+  return {
+    icon: undefined,
+    title: 'Your watchlist is empty',
+    message: 'Start building your movie collection by adding your first movie.',
+    showAdd: true
+  };
 });
 
 const sortButtons = computed(() => [
-  {
-    text: 'Recently Added',
-    icon: 'time-outline',
-    handler: () => { sortOption.value = 'recent'; }
-  },
-  {
-    text: 'Title A-Z',
-    icon: 'text-outline',
-    handler: () => { sortOption.value = 'title-asc'; }
-  },
-  {
-    text: 'Title Z-A',
-    icon: 'text-outline',
-    handler: () => { sortOption.value = 'title-desc'; }
-  },
-  {
-    text: 'Highest Rating',
-    icon: 'star-outline',
-    handler: () => { sortOption.value = 'rating-desc'; }
-  },
-  {
-    text: 'Lowest Rating',
-    icon: 'star-outline',
-    handler: () => { sortOption.value = 'rating-asc'; }
-  },
-  {
-    text: 'Newest Release',
-    icon: 'calendar-outline',
-    handler: () => { sortOption.value = 'year-desc'; }
-  },
-  {
-    text: 'Oldest Release',
-    icon: 'calendar-outline',
-    handler: () => { sortOption.value = 'year-asc'; }
-  },
-  {
-    text: 'Cancel',
-    role: 'cancel'
-  }
+  { text: 'Recently Added', icon: timeOutline, handler: () => (sortOption.value = 'recent') },
+  { text: 'Title A-Z', icon: textOutline, handler: () => (sortOption.value = 'title-asc') },
+  { text: 'Title Z-A', icon: textOutline, handler: () => (sortOption.value = 'title-desc') },
+  { text: 'Highest Rating', icon: starOutline, handler: () => (sortOption.value = 'rating-desc') },
+  { text: 'Lowest Rating', icon: starOutline, handler: () => (sortOption.value = 'rating-asc') },
+  { text: 'Newest Release', icon: calendarOutline, handler: () => (sortOption.value = 'year-desc') },
+  { text: 'Oldest Release', icon: calendarOutline, handler: () => (sortOption.value = 'year-asc') },
+  { text: 'Cancel', role: 'cancel' }
 ]);
 
-const filteredMovies = computed(() => {
-  let movies = movieService.searchMovies(searchQuery.value);
-  
-  movies = movieService.filterMovies(movies, statusFilter.value);
-  movies = movieService.filterByGenre(movies, genreFilter.value);
-  movies = movieService.sortMovies(movies, sortOption.value);
-  
-  return movies;
-});
-
-const goToAddMovie = () => {
-  router.push('/add');
-};
-
-const handleEdit = (movie: Movie) => {
-  router.push(`/edit/${movie.id}`);
-};
+const goToAddMovie = () => router.push('/add');
+const handleOpen = (movie: Movie) => router.push(`/movie/${movie.id}`);
+const handleEdit = (movie: Movie) => router.push(`/edit/${movie.id}`);
 
 const handleDelete = async (movie: Movie) => {
-  const alert = await alertController.create({
-    header: 'Delete Movie?',
-    subHeader: 'Are you sure you want to remove this movie from your watchlist?',
-    buttons: [
-      {
-        text: 'Cancel',
-        role: 'cancel',
-        cssClass: 'secondary'
-      },
-      {
-        text: 'Delete',
-        role: 'destructive',
-        handler: async () => {
-          try {
-            await movieService.deleteMovie(movie.id);
-            showToast('Movie deleted successfully!');
-          } catch (error) {
-            console.error('Error deleting movie:', error);
-            showToast('Error deleting movie');
-          }
-        }
-      }
-    ]
+  const confirmed = await confirmDelete({
+    subHeader: `Remove "${movie.title}" from your watchlist?`
   });
+  if (!confirmed) return;
 
-  await alert.present();
-};
-
-const showToast = async (message: string) => {
-  const toast = await toastController.create({
-    message,
-    duration: 2000,
-    position: 'bottom',
-    color: 'success'
-  });
-
-  await toast.present();
+  try {
+    // The live store drops the card on its own once the record is gone.
+    await movieService.deleteMovie(movie.id);
+    showToast('Movie deleted.');
+  } catch (error) {
+    console.error('Error deleting movie:', error);
+    showToast('Could not delete that movie.', 'danger');
+  }
 };
 </script>
 
 <style scoped>
-.watchlist-container {
-  padding: 32px 40px;
-  max-width: var(--container-max-width);
-  margin: 0 auto;
-  padding-bottom: 80px;
+.filter-bar {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  border-radius: var(--radius-lg);
+  padding: var(--spacing-sm);
+  margin-bottom: var(--spacing-md);
 }
 
 .search-bar {
-  margin-bottom: 24px;
+  --box-shadow: none;
+  padding: 0;
+  margin-bottom: var(--spacing-sm);
 }
 
 .filters-section {
   display: flex;
-  gap: 16px;
-  margin-bottom: 32px;
   align-items: center;
-  flex-wrap: wrap;
+  gap: var(--spacing-sm);
 }
 
-ion-segment {
+.filters-section ion-segment {
   flex: 1;
-  min-width: 280px;
+  border-radius: var(--radius-md);
+  padding: 4px;
 }
 
 .genre-select {
-  width: 180px;
-  min-width: 140px;
+  --background: var(--surface-2);
+  --border-radius: var(--radius-md);
+  min-height: var(--filter-height-mobile);
+  min-width: 150px;
+  max-width: 190px;
+  padding: 2px var(--spacing-sm);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  font-size: var(--font-size-sm);
 }
 
-.movies-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
-  gap: 24px;
+.result-count {
+  font-size: var(--font-size-xs);
+  color: var(--text-tertiary);
+  margin: 0 0 var(--spacing-md);
+  padding-left: 2px;
 }
 
-@media (min-width: 1024px) {
-  .watchlist-container {
-    padding: 40px 48px;
-  }
-  
-  .search-bar {
-    margin-bottom: 28px;
-  }
-  
-  .filters-section {
-    gap: 20px;
-    margin-bottom: 36px;
-  }
-  
-  .genre-select {
-    width: 200px;
-  }
-  
-  .movies-grid {
-    grid-template-columns: repeat(4, 1fr);
-    gap: 28px;
-  }
-}
-
-@media (max-width: 768px) {
-  .watchlist-container {
-    padding: 24px 20px;
-  }
-  
-  .search-bar {
-    margin-bottom: 20px;
-  }
-  
+@media (max-width: 767.98px) {
   .filters-section {
     flex-direction: column;
     align-items: stretch;
-    gap: 12px;
-    margin-bottom: 24px;
   }
-  
-  ion-segment {
-    min-width: auto;
-  }
-  
-  .genre-select {
-    width: 100%;
-  }
-  
-  .movies-grid {
-    grid-template-columns: repeat(2, 1fr);
-    gap: 20px;
-  }
-}
 
-@media (max-width: 480px) {
-  .watchlist-container {
-    padding: 20px 16px;
-  }
-  
-  .search-bar {
-    margin-bottom: 16px;
-  }
-  
-  .filters-section {
-    gap: 10px;
-    margin-bottom: 20px;
-  }
-  
-  .movies-grid {
-    grid-template-columns: 1fr;
-    gap: 16px;
+  .genre-select {
+    max-width: none;
   }
 }
 </style>

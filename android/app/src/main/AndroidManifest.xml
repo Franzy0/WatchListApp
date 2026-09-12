@@ -38,4 +38,17 @@
     <!-- Permissions -->
 
     <uses-permission android:name="android.permission.INTERNET" />
+
+    <!-- Taking a photo for a movie poster -->
+    <uses-permission android:name="android.permission.CAMERA" />
+
+    <!-- Reading an existing image from the gallery. READ_MEDIA_IMAGES is the API 33+
+         replacement; the legacy permission is capped so it is neither requested on newer
+         releases nor flagged in the Play Console, but still covers the minSdk 24 floor. -->
+    <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />
+    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE"
+                     android:maxSdkVersion="32" />
+
+    <!-- The app is still usable on a device without a camera -->
+    <uses-feature android:name="android.hardware.camera" android:required="false" />
 </manifest>

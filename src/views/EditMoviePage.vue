@@ -1,35 +1,31 @@
 <template>
   <ion-page>
-    <ion-header>
-      <ion-toolbar>
-        <ion-buttons slot="start">
-          <ion-back-button default-href="/watchlist"></ion-back-button>
-        </ion-buttons>
-        <ion-title>Edit Movie</ion-title>
-      </ion-toolbar>
-    </ion-header>
+    <PageHeader title="Edit Movie" back-href="/watchlist" condensed />
 
     <ion-content :fullscreen="true">
-      <div v-if="loading" class="loading-container">
-        <ion-spinner name="crescent"></ion-spinner>
+      <div v-if="loading" class="page-container page-container--narrow loading-container">
+        <ion-spinner name="crescent" />
       </div>
 
-      <div v-else-if="movie" class="edit-movie-container">
-        <div class="form-header">
-          <ion-icon :icon="createOutline" class="form-icon"></ion-icon>
-          <h2 class="form-title">Edit Movie</h2>
-          <p class="form-subtitle">Update the details for {{ movie.title }}.</p>
+      <div v-else-if="movie" class="page-container page-container--narrow">
+        <div class="form-hero">
+          <ion-icon :icon="createOutline" class="form-hero__icon" />
+          <h2 class="form-hero__title">Edit Movie</h2>
+          <p class="form-hero__subtitle">Update the details for {{ movie.title }}.</p>
         </div>
 
-        <MovieForm 
+        <MovieForm
           :movie="movie"
+          :busy="busy"
+          :progress="progress"
           @submit="handleSubmit"
           @cancel="handleCancel"
         />
       </div>
 
-      <div v-else class="error-container">
-        <EmptyState 
+      <div v-else class="page-container page-container--narrow">
+        <EmptyState
+          :icon="alertCircleOutline"
           title="Movie Not Found"
           message="The movie you're trying to edit doesn't exist."
           :show-add-button="false"
@@ -42,181 +38,98 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue';
 import { useRouter, useRoute } from 'vue-router';
-import {
-  IonPage,
-  IonHeader,
-  IonToolbar,
-  IonTitle,
-  IonButtons,
-  IonBackButton,
-  IonContent,
-  IonIcon,
-  IonSpinner,
-  toastController
-} from '@ionic/vue';
-import { createOutline } from 'ionicons/icons';
+import { IonPage, IonContent, IonIcon, IonSpinner } from '@ionic/vue';
+import { createOutline, alertCircleOutline } from 'ionicons/icons';
+import PageHeader from '../components/PageHeader.vue';
 import MovieForm from '../components/MovieForm.vue';
 import EmptyState from '../components/EmptyState.vue';
 import { movieService } from '../services/movieService';
-import type { Movie } from '../types/movie';
+import { uploadPoster, deletePoster } from '../services/storageService';
+import { useToast } from '../composables/useToast';
+import type { Movie, MovieFormSubmit, MovieUpdate } from '../types/movie';
 
 const router = useRouter();
 const route = useRoute();
+const { showToast } = useToast();
 
 const movie = ref<Movie | null>(null);
 const loading = ref(true);
+const busy = ref(false);
+const progress = ref<number | null>(null);
 
 onMounted(async () => {
   const movieId = Number(route.params.id);
   try {
-    const foundMovie = await movieService.getMovieById(movieId);
-    
-    if (foundMovie) {
-      movie.value = foundMovie;
-    }
+    movie.value = await movieService.getMovieById(movieId);
   } catch (error) {
     console.error('Error loading movie:', error);
+    showToast('Could not load that movie.', 'danger');
+  } finally {
+    loading.value = false;
   }
-  
-  loading.value = false;
 });
 
-const handleSubmit = async (movieData: Omit<Movie, 'id' | 'createdAt'>) => {
-  if (movie.value) {
-    try {
-      await movieService.updateMovie(movie.value.id, movieData);
-      showToast('Movie updated successfully!');
-      router.push('/watchlist');
-    } catch (error) {
-      console.error('Error updating movie:', error);
-      showToast('Error updating movie');
+const handleSubmit = async (payload: MovieFormSubmit) => {
+  const current = movie.value;
+  if (!current) return;
+
+  busy.value = true;
+  progress.value = null;
+
+  const updates: MovieUpdate = { ...payload.data };
+  const previousPath = current.posterPath;
+  let uploadedPath: string | null = null;
+
+  try {
+    if (payload.poster.action === 'replace') {
+      // Upload before touching the record. Nothing is at risk yet, so a failure here can
+      // simply leave the user on the form with their picture still attached.
+      progress.value = 0;
+      const { url, path } = await uploadPoster(payload.poster.file, current.id, percent => {
+        progress.value = percent;
+      });
+      updates.posterUrl = url;
+      updates.posterPath = path;
+      uploadedPath = path;
+    } else if (payload.poster.action === 'remove') {
+      // null rather than undefined: Realtime Database reads null as "delete this key".
+      updates.posterUrl = null;
+      updates.posterPath = null;
     }
+
+    progress.value = null;
+    await movieService.updateMovie(current.id, updates);
+
+    // Only once the record points somewhere else is the old file safe to remove.
+    if (previousPath && previousPath !== uploadedPath && payload.poster.action !== 'keep') {
+      void deletePoster(previousPath);
+    }
+
+    showToast('Movie updated.');
+    router.push('/watchlist');
+  } catch (error) {
+    console.error('Error updating movie:', error);
+    const reason = error instanceof Error ? error.message : 'Something went wrong.';
+    showToast(`Could not save your changes. ${reason}`, 'danger');
+  } finally {
+    busy.value = false;
+    progress.value = null;
   }
 };
 
-const handleCancel = () => {
-  router.back();
-};
-
-const showToast = async (message: string) => {
-  const toast = await toastController.create({
-    message,
-    duration: 2000,
-    position: 'bottom',
-    color: 'success'
-  });
-
-  await toast.present();
-};
+const handleCancel = () => router.back();
 </script>
 
 <style scoped>
-.edit-movie-container {
-  padding: 32px 40px;
-  max-width: 700px;
-  margin: 0 auto;
-}
-
 .loading-container {
   display: flex;
-  justify-content: center;
   align-items: center;
-  min-height: 400px;
+  justify-content: center;
+  min-height: 60vh;
 }
 
-.error-container {
-  padding: 24px;
-}
-
-.form-header {
-  text-align: center;
-  margin-bottom: 40px;
-}
-
-.form-icon {
-  font-size: 3.5rem;
-  color: var(--primary-color);
-  margin-bottom: 20px;
-}
-
-.form-title {
-  font-size: var(--font-size-3xl);
-  font-weight: 700;
-  color: var(--text-primary);
-  margin: 0 0 12px 0;
-}
-
-.form-subtitle {
-  font-size: var(--font-size-md);
-  color: var(--text-secondary);
-  margin: 0;
-  line-height: 1.6;
-  max-width: 500px;
-  margin-left: auto;
-  margin-right: auto;
-}
-
-@media (min-width: 1024px) {
-  .edit-movie-container {
-    max-width: 750px;
-    padding: 40px 48px;
-  }
-  
-  .form-header {
-    margin-bottom: 48px;
-  }
-  
-  .form-icon {
-    font-size: 4rem;
-  }
-  
-  .form-title {
-    font-size: var(--font-size-4xl);
-  }
-  
-  .form-subtitle {
-    font-size: var(--font-size-lg);
-  }
-}
-
-@media (max-width: 768px) {
-  .edit-movie-container {
-    padding: 24px 20px;
-    max-width: 100%;
-  }
-  
-  .form-header {
-    margin-bottom: 32px;
-  }
-  
-  .form-icon {
-    font-size: 3rem;
-  }
-  
-  .form-title {
-    font-size: var(--font-size-2xl);
-  }
-  
-  .form-subtitle {
-    font-size: var(--font-size-sm);
-  }
-}
-
-@media (max-width: 480px) {
-  .edit-movie-container {
-    padding: 20px 16px;
-  }
-  
-  .form-icon {
-    font-size: 2.5rem;
-  }
-  
-  .form-title {
-    font-size: var(--font-size-xl);
-  }
-  
-  .form-subtitle {
-    font-size: var(--font-size-sm);
-  }
+.loading-container ion-spinner {
+  width: 44px;
+  height: 44px;
 }
 </style>

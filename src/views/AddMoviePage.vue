@@ -1,23 +1,20 @@
 <template>
   <ion-page>
-    <ion-header>
-      <ion-toolbar>
-        <ion-buttons slot="start">
-          <ion-back-button default-href="/"></ion-back-button>
-        </ion-buttons>
-        <ion-title>Add Movie</ion-title>
-      </ion-toolbar>
-    </ion-header>
+    <PageHeader title="Add Movie" back-href="/watchlist" condensed />
 
     <ion-content :fullscreen="true">
-      <div class="add-movie-container">
-        <div class="form-header">
-          <ion-icon :icon="filmOutline" class="form-icon"></ion-icon>
-          <h2 class="form-title">Add New Movie</h2>
-          <p class="form-subtitle">Fill in the details to add a movie to your watchlist.</p>
+      <div class="page-container page-container--narrow">
+        <div class="form-hero">
+          <ion-icon :icon="filmOutline" class="form-hero__icon" />
+          <h2 class="form-hero__title">Add New Movie</h2>
+          <p class="form-hero__subtitle">
+            Fill in the details to add a movie to your watchlist.
+          </p>
         </div>
 
-        <MovieForm 
+        <MovieForm
+          :busy="busy"
+          :progress="progress"
           @submit="handleSubmit"
           @cancel="handleCancel"
         />
@@ -27,148 +24,59 @@
 </template>
 
 <script setup lang="ts">
+import { ref } from 'vue';
 import { useRouter } from 'vue-router';
-import {
-  IonPage,
-  IonHeader,
-  IonToolbar,
-  IonTitle,
-  IonButtons,
-  IonBackButton,
-  IonContent,
-  IonIcon,
-  toastController
-} from '@ionic/vue';
+import { IonPage, IonContent, IonIcon } from '@ionic/vue';
 import { filmOutline } from 'ionicons/icons';
+import PageHeader from '../components/PageHeader.vue';
 import MovieForm from '../components/MovieForm.vue';
 import { movieService } from '../services/movieService';
-import type { Movie } from '../types/movie';
+import { uploadPoster } from '../services/storageService';
+import { useToast } from '../composables/useToast';
+import type { MovieFormSubmit } from '../types/movie';
 
 const router = useRouter();
+const { showToast } = useToast();
 
-const handleSubmit = async (movieData: Omit<Movie, 'id' | 'createdAt'>) => {
+const busy = ref(false);
+const progress = ref<number | null>(null);
+
+const handleSubmit = async (payload: MovieFormSubmit) => {
+  busy.value = true;
+  progress.value = null;
+
   try {
-    await movieService.addMovie(movieData);
-    showToast('Movie added successfully!');
+    // The record is written first, on purpose. If the picture then fails to upload the
+    // typing is still saved, rather than the whole entry being lost to a storage error.
+    const movie = await movieService.addMovie(payload.data);
+
+    if (payload.poster.action === 'replace') {
+      try {
+        progress.value = 0;
+        const { url, path } = await uploadPoster(payload.poster.file, movie.id, percent => {
+          progress.value = percent;
+        });
+        await movieService.updateMovie(movie.id, { posterUrl: url, posterPath: path });
+        showToast('Movie added.');
+      } catch (uploadError) {
+        console.error('Poster upload failed:', uploadError);
+        const reason =
+          uploadError instanceof Error ? uploadError.message : 'The upload failed.';
+        showToast(`Movie added, but the poster did not upload. ${reason}`, 'warning');
+      }
+    } else {
+      showToast('Movie added.');
+    }
+
     router.push('/watchlist');
   } catch (error) {
     console.error('Error adding movie:', error);
-    showToast('Error adding movie');
+    showToast('Could not add that movie.', 'danger');
+  } finally {
+    busy.value = false;
+    progress.value = null;
   }
 };
 
-const handleCancel = () => {
-  router.back();
-};
-
-const showToast = async (message: string) => {
-  const toast = await toastController.create({
-    message,
-    duration: 2000,
-    position: 'bottom',
-    color: 'success'
-  });
-
-  await toast.present();
-};
+const handleCancel = () => router.back();
 </script>
-
-<style scoped>
-.add-movie-container {
-  padding: 32px 40px;
-  max-width: 700px;
-  margin: 0 auto;
-}
-
-.form-header {
-  text-align: center;
-  margin-bottom: 40px;
-}
-
-.form-icon {
-  font-size: 3.5rem;
-  color: var(--primary-color);
-  margin-bottom: 20px;
-}
-
-.form-title {
-  font-size: var(--font-size-3xl);
-  font-weight: 700;
-  color: var(--text-primary);
-  margin: 0 0 12px 0;
-}
-
-.form-subtitle {
-  font-size: var(--font-size-md);
-  color: var(--text-secondary);
-  margin: 0;
-  line-height: 1.6;
-  max-width: 500px;
-  margin-left: auto;
-  margin-right: auto;
-}
-
-@media (min-width: 1024px) {
-  .add-movie-container {
-    max-width: 750px;
-    padding: 40px 48px;
-  }
-  
-  .form-header {
-    margin-bottom: 48px;
-  }
-  
-  .form-icon {
-    font-size: 4rem;
-  }
-  
-  .form-title {
-    font-size: var(--font-size-4xl);
-  }
-  
-  .form-subtitle {
-    font-size: var(--font-size-lg);
-  }
-}
-
-@media (max-width: 768px) {
-  .add-movie-container {
-    padding: 24px 20px;
-    max-width: 100%;
-  }
-  
-  .form-header {
-    margin-bottom: 32px;
-  }
-  
-  .form-icon {
-    font-size: 3rem;
-  }
-  
-  .form-title {
-    font-size: var(--font-size-2xl);
-  }
-  
-  .form-subtitle {
-    font-size: var(--font-size-sm);
-  }
-}
-
-@media (max-width: 480px) {
-  .add-movie-container {
-    padding: 20px 16px;
-  }
-  
-  .form-icon {
-    font-size: 2.5rem;
-  }
-  
-  .form-title {
-    font-size: var(--font-size-xl);
-  }
-  
-  .form-subtitle {
-    font-size: var(--font-size-sm);
-  }
-}
-</style>

@@ -1,11 +1,9 @@
 import { createRouter, createWebHistory } from '@ionic/vue-router';
 import { RouteRecordRaw } from 'vue-router';
 import DashboardPage from '../views/DashboardPage.vue';
-import WatchlistPage from '../views/WatchlistPage.vue';
-import AddMoviePage from '../views/AddMoviePage.vue';
-import EditMoviePage from '../views/EditMoviePage.vue';
-import FirebaseStatusPage from '../views/FirebaseStatusPage.vue';
 
+// The dashboard is the landing route, so it is bundled eagerly. The rest load on demand,
+// which keeps the cold start of the packaged app smaller.
 const routes: Array<RouteRecordRaw> = [
   {
     path: '/',
@@ -19,22 +17,32 @@ const routes: Array<RouteRecordRaw> = [
   {
     path: '/watchlist',
     name: 'Watchlist',
-    component: WatchlistPage
+    component: () => import('../views/WatchlistPage.vue')
   },
   {
     path: '/add',
     name: 'AddMovie',
-    component: AddMoviePage
+    component: () => import('../views/AddMoviePage.vue')
+  },
+  {
+    path: '/movie/:id',
+    name: 'MovieDetail',
+    component: () => import('../views/MovieDetailPage.vue')
   },
   {
     path: '/edit/:id',
     name: 'EditMovie',
-    component: EditMoviePage
+    component: () => import('../views/EditMoviePage.vue')
   },
   {
     path: '/firebase-status',
     name: 'FirebaseStatus',
-    component: FirebaseStatusPage
+    component: () => import('../views/FirebaseStatusPage.vue')
+  },
+  {
+    // Anything unrecognised goes home rather than rendering a blank page.
+    path: '/:pathMatch(.*)*',
+    redirect: '/dashboard'
   }
 ];
 

@@ -1,56 +1,37 @@
+/* CineList theme tokens.
+ *
+ * Structure, in order:
+ *   1. Typography and scale     - identical in both palettes
+ *   2. Brand and Ionic roles    - identical in both palettes
+ *   3. Light semantic palette   - :root
+ *   4. Dark semantic palette    - :root.ion-palette-dark
+ *   5. Global element theming   - references semantic tokens only
+ *   6. Utilities
+ *
+ * Sections 5 and 6 must never name a raw colour. That is what lets the palette flip
+ * without touching a single component.
+ */
+
+/* ------------------------------------------------------------------ *
+ * 1. Typography and scale
+ * ------------------------------------------------------------------ */
+
 :root {
-  --ion-background-color: #0B0B0B;
-  --ion-text-color: #F5F5F5;
-  --ion-card-background: #1A1A1A;
-  --ion-card-border: #2A2A2A;
-  
-  --primary-color: #E50914;
-  --primary-color-rgb: 229, 9, 20;
-  --primary-color-shade: #B20710;
-  --primary-color-tint: #F40612;
-  
-  --secondary-color: #FF6B35;
-  --secondary-color-rgb: 255, 107, 53;
-  
-  --success-color: #46D369;
-  --success-color-rgb: 70, 211, 105;
-  
-  --warning-color: #FFA00A;
-  --warning-color-rgb: 255, 160, 10;
-  
-  --danger-color: #E50914;
-  --danger-color-rgb: 229, 9, 20;
-  
-  --dark-color: #0B0B0B;
-  --dark-color-rgb: 11, 11, 11;
-  
-  --medium-color: #1A1A1A;
-  --medium-color-rgb: 26, 26, 26;
-  
-  --light-color: #202020;
-  --light-color-rgb: 32, 32, 32;
-  
-  --text-primary: #F5F5F5;
-  --text-secondary: #B3B3B3;
-  --text-tertiary: #808080;
-  
-  --border-color: #2A2A2A;
-  --border-color-light: #3A3A3A;
-  
-  --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.4);
-  --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.5);
-  --shadow-lg: 0 8px 32px rgba(0, 0, 0, 0.6);
-  
+  /* Roboto Condensed ships with Android, so the condensed display face costs nothing to
+   * download and still works with the device offline. A web font would have to be
+   * self-hosted here: a Google Fonts link is unreachable from a packaged APK. */
+  --font-display: 'Roboto Condensed', 'Archivo Narrow', 'Arial Narrow', var(--ion-font-family), sans-serif;
+  --font-body: var(--ion-font-family), system-ui, sans-serif;
+
   --radius-sm: 10px;
   --radius-md: 14px;
   --radius-lg: 18px;
   --radius-xl: 24px;
-  
+
   --transition-fast: 0.15s ease;
   --transition-normal: 0.25s ease;
   --transition-slow: 0.4s ease;
-  
-  /* Typography Scale */
+
   --font-size-xs: 14px;
   --font-size-sm: 15px;
   --font-size-base: 16px;
@@ -60,8 +41,7 @@
   --font-size-2xl: 24px;
   --font-size-3xl: 28px;
   --font-size-4xl: 32px;
-  
-  /* Spacing Scale */
+
   --spacing-xs: 8px;
   --spacing-sm: 12px;
   --spacing-md: 16px;
@@ -70,47 +50,219 @@
   --spacing-2xl: 32px;
   --spacing-3xl: 40px;
   --spacing-4xl: 48px;
-  
-  /* Container Widths */
+
   --container-max-width: 1600px;
   --container-max-width-desktop: 1500px;
   --container-max-width-tablet: 1200px;
-  
-  /* Header Heights */
+
   --header-height-desktop: 72px;
   --header-height-mobile: 64px;
-  
-  /* Button Heights */
   --button-height-desktop: 54px;
   --button-height-mobile: 50px;
-  
-  /* Input Heights */
   --input-height-desktop: 58px;
   --input-height-mobile: 54px;
-  
-  /* Search Bar Heights */
   --search-height-desktop: 56px;
   --search-height-mobile: 52px;
-  
-  /* Filter Heights */
   --filter-height-desktop: 48px;
   --filter-height-mobile: 46px;
+
+  /* Movie posters are 2:3. Cards can override for dense layouts. */
+  --poster-ratio: 2 / 3;
+
+  /* Room under the last card so the floating action button never covers it. */
+  --fab-clearance: 0px;
 }
 
-@media (prefers-color-scheme: dark) {
+@media (max-width: 767.98px) {
   :root {
-    --ion-background-color: #0B0B0B;
-    --ion-text-color: #F5F5F5;
+    --fab-clearance: 92px;
   }
 }
 
+/* ------------------------------------------------------------------ *
+ * 2. Brand and Ionic role mapping
+ *
+ * The brand hues are the same in both palettes. Mapping them onto Ionic's own
+ * --ion-color-* roles is what makes color="primary" render CineList red: without it
+ * Ionic falls back to its default blue, which is why some buttons were blue and others
+ * red depending on whether a component happened to hardcode a background.
+ * ------------------------------------------------------------------ */
+
+:root {
+  --primary-color: #E50914;
+  --primary-color-rgb: 229, 9, 20;
+  --primary-color-shade: #B20710;
+  --primary-color-tint: #F40612;
+
+  --secondary-color: #FF6B35;
+  --secondary-color-rgb: 255, 107, 53;
+
+  --success-color: #46D369;
+  --success-color-rgb: 70, 211, 105;
+
+  --warning-color: #FFA00A;
+  --warning-color-rgb: 255, 160, 10;
+
+  --danger-color: #E50914;
+  --danger-color-rgb: 229, 9, 20;
+  --danger-color-shade: #B20710;
+
+  --text-on-accent: #ffffff;
+
+  --ion-color-primary: var(--primary-color);
+  --ion-color-primary-rgb: var(--primary-color-rgb);
+  --ion-color-primary-contrast: var(--text-on-accent);
+  --ion-color-primary-contrast-rgb: 255, 255, 255;
+  --ion-color-primary-shade: var(--primary-color-shade);
+  --ion-color-primary-tint: var(--primary-color-tint);
+
+  --ion-color-success: var(--success-color);
+  --ion-color-success-rgb: var(--success-color-rgb);
+  --ion-color-success-contrast: #000000;
+  --ion-color-success-contrast-rgb: 0, 0, 0;
+  --ion-color-success-shade: #3eba5c;
+  --ion-color-success-tint: #59d778;
+
+  --ion-color-warning: var(--warning-color);
+  --ion-color-warning-rgb: var(--warning-color-rgb);
+  --ion-color-warning-contrast: #000000;
+  --ion-color-warning-contrast-rgb: 0, 0, 0;
+  --ion-color-warning-shade: #e08d09;
+  --ion-color-warning-tint: #ffaa23;
+
+  --ion-color-danger: var(--danger-color);
+  --ion-color-danger-rgb: var(--danger-color-rgb);
+  --ion-color-danger-contrast: var(--text-on-accent);
+  --ion-color-danger-contrast-rgb: 255, 255, 255;
+  --ion-color-danger-shade: var(--danger-color-shade);
+  --ion-color-danger-tint: var(--primary-color-tint);
+}
+
+/* ------------------------------------------------------------------ *
+ * 3. Light palette
+ * ------------------------------------------------------------------ */
+
+:root {
+  color-scheme: light;
+
+  --ion-background-color: #F6F7F9;
+  --ion-background-color-rgb: 246, 247, 249;
+  --ion-text-color: #16181D;
+  --ion-text-color-rgb: 22, 24, 29;
+  --ion-card-background: #FFFFFF;
+  --ion-item-background: #FFFFFF;
+  --ion-toolbar-background: #FFFFFF;
+  --ion-tab-bar-background: #FFFFFF;
+
+  --surface-0: #F6F7F9;
+  --surface-1: #FFFFFF;
+  --surface-2: #FFFFFF;
+  --surface-3: #EEF0F4;
+  --surface-glass: rgba(255, 255, 255, 0.72);
+
+  --text-primary: #16181D;
+  --text-secondary: #56606E;
+  --text-tertiary: #838D9A;
+
+  --border-color: #E3E6EB;
+  --border-color-light: #EFF1F5;
+  --overlay-hover: rgba(0, 0, 0, 0.045);
+
+  --shadow-sm: 0 1px 3px rgba(16, 20, 28, 0.08);
+  --shadow-md: 0 4px 14px rgba(16, 20, 28, 0.10);
+  --shadow-lg: 0 12px 32px rgba(16, 20, 28, 0.14);
+
+  /* Accent hues used as TEXT rather than as a fill. The saturated brand colours fail
+   * contrast on a white background, so text gets a darkened variant. */
+  --primary-text: #B20710;
+  --success-text: #17803D;
+  --warning-text: #8A5200;
+  --danger-text: #C1121C;
+
+  --chip-alpha: 0.12;
+
+  --hero-gradient: linear-gradient(135deg, rgba(229, 9, 20, 0.14), rgba(255, 107, 53, 0.10) 45%, rgba(246, 247, 249, 0) 100%);
+  --poster-placeholder-gradient: linear-gradient(135deg, #EAEDF2 0%, #F6F7F9 100%);
+  --skeleton-base: #E9ECF1;
+  --skeleton-sheen: rgba(255, 255, 255, 0.9);
+
+  /* Legacy aliases. Older component styles still name these. */
+  --dark-color: var(--surface-0);
+  --medium-color: var(--surface-1);
+  --light-color: var(--surface-3);
+}
+
+/* ------------------------------------------------------------------ *
+ * 4. Dark palette
+ *
+ * The class is doubled on purpose. Ionic's own palette rules are written as
+ * `.ion-palette-dark.md`, a two-class selector, so a single `.ion-palette-dark` here
+ * would tie with them and be decided by bundle order. Doubling costs nothing and makes
+ * these values win outright.
+ * ------------------------------------------------------------------ */
+
+:root.ion-palette-dark.ion-palette-dark {
+  color-scheme: dark;
+
+  --ion-background-color: #0B0B0B;
+  --ion-background-color-rgb: 11, 11, 11;
+  --ion-text-color: #F5F5F5;
+  --ion-text-color-rgb: 245, 245, 245;
+  --ion-card-background: #1A1A1A;
+  --ion-item-background: #1A1A1A;
+  --ion-toolbar-background: #101012;
+  --ion-tab-bar-background: #101012;
+
+  --surface-0: #0B0B0B;
+  --surface-1: #1A1A1A;
+  --surface-2: #202020;
+  --surface-3: #2A2A2A;
+  --surface-glass: rgba(18, 18, 20, 0.72);
+
+  --text-primary: #F5F5F5;
+  --text-secondary: #B3B3B3;
+  --text-tertiary: #808080;
+
+  --border-color: #2A2A2A;
+  --border-color-light: #3A3A3A;
+  --overlay-hover: rgba(255, 255, 255, 0.06);
+
+  --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.4);
+  --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.5);
+  --shadow-lg: 0 8px 32px rgba(0, 0, 0, 0.6);
+
+  --primary-text: #FF4D57;
+  --success-text: #46D369;
+  --warning-text: #FFA00A;
+  --danger-text: #FF4D57;
+
+  --chip-alpha: 0.15;
+
+  --hero-gradient: linear-gradient(135deg, rgba(229, 9, 20, 0.35), rgba(255, 107, 53, 0.18) 45%, rgba(11, 11, 11, 0) 100%);
+  --poster-placeholder-gradient: linear-gradient(135deg, #1A1A1A 0%, #202020 100%);
+  --skeleton-base: #1A1A1A;
+  --skeleton-sheen: rgba(255, 255, 255, 0.07);
+
+  --dark-color: var(--surface-0);
+  --medium-color: var(--surface-1);
+  --light-color: var(--surface-3);
+}
+
+/* ------------------------------------------------------------------ *
+ * 5. Global element theming
+ * ------------------------------------------------------------------ */
+
+body {
+  font-family: var(--font-body);
+}
+
 ion-content {
-  --background: var(--ion-background-color);
+  --background: var(--surface-0);
 }
 
 ion-card {
-  --background: var(--ion-card-background);
-  --color: var(--ion-text-color);
+  --background: var(--surface-1);
+  --color: var(--text-primary);
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-md);
   border: 1px solid var(--border-color);
@@ -124,36 +276,25 @@ ion-button {
   letter-spacing: 0.3px;
   font-size: var(--font-size-md);
   min-height: var(--button-height-mobile);
+  text-transform: none;
 }
 
-ion-button.primary {
-  --background: var(--primary-color);
-  --background-hover: var(--primary-color-shade);
-  --color: #ffffff;
+ion-button[fill='clear'] {
+  --box-shadow: none;
 }
 
-ion-button.secondary {
-  --background: var(--medium-color);
-  --background-hover: var(--light-color);
+/* No --padding-start/-end here. The outline fill supplies its own padding, and forcing
+ * a value pushes the notch that the floating label cuts out of alignment with the text. */
+ion-input,
+ion-select,
+ion-textarea {
+  --background: var(--surface-2);
   --color: var(--text-primary);
-}
-
-ion-button.danger {
-  --background: var(--danger-color);
-  --background-hover: var(--danger-color-shade);
-  --color: #ffffff;
-}
-
-ion-input, ion-select, ion-textarea {
-  --background: var(--medium-color);
-  --color: var(--text-primary);
-  --placeholder-color: var(--text-secondary);
-  --placeholder-opacity: 0.7;
+  --placeholder-color: var(--text-tertiary);
+  --placeholder-opacity: 1;
   --border-color: var(--border-color);
+  --border-color-focused: var(--primary-color);
   --border-radius: var(--radius-md);
-  --padding-start: 18px;
-  --padding-end: 18px;
-  --highlight-height: 2px;
   --highlight-color-focused: var(--primary-color);
   font-size: var(--font-size-lg);
   min-height: var(--input-height-mobile);
@@ -170,26 +311,28 @@ ion-label {
 }
 
 ion-toolbar {
-  --background: var(--medium-color);
+  --background: var(--ion-toolbar-background);
   --color: var(--text-primary);
   --border-color: var(--border-color);
   min-height: var(--header-height-mobile);
 }
 
 ion-toolbar ion-title {
+  font-family: var(--font-display);
   font-size: var(--font-size-xl);
   font-weight: 700;
+  letter-spacing: 0.3px;
 }
 
 ion-tab-bar {
-  --background: var(--medium-color);
+  --background: var(--ion-tab-bar-background);
   --color: var(--text-tertiary);
   --color-selected: var(--primary-color);
   --border-color: var(--border-color);
 }
 
 ion-searchbar {
-  --background: var(--medium-color);
+  --background: var(--surface-2);
   --color: var(--text-primary);
   --placeholder-color: var(--text-tertiary);
   --icon-color: var(--text-tertiary);
@@ -201,53 +344,54 @@ ion-searchbar {
 
 ion-searchbar.searchbar-has-focus {
   --border-color: var(--primary-color);
-  --box-shadow: 0 0 0 3px rgba(229, 9, 20, 0.15);
+  --box-shadow: 0 0 0 3px rgba(var(--primary-color-rgb), var(--chip-alpha));
 }
 
 ion-segment {
-  --background: var(--medium-color);
+  --background: var(--surface-3);
 }
 
 ion-segment-button {
   --color: var(--text-secondary);
-  --color-checked: #ffffff;
+  --color-checked: var(--text-on-accent);
   --background-checked: var(--primary-color);
   --indicator-color: var(--primary-color);
   --border-radius: var(--radius-sm);
   min-height: var(--filter-height-mobile);
   font-size: var(--font-size-md);
   font-weight: 600;
+  text-transform: none;
 }
 
 ion-modal {
-  --background: var(--dark-color);
+  --background: var(--surface-1);
 }
 
 ion-alert {
-  --background: var(--medium-color);
+  --background: var(--surface-1);
   --header-color: var(--text-primary);
   --message-color: var(--text-secondary);
 }
 
 ion-toast {
-  --background: var(--medium-color);
+  --background: var(--surface-1);
   --color: var(--text-primary);
   --button-color: var(--primary-color);
 }
 
 ion-chip {
-  --background: var(--light-color);
+  --background: var(--surface-3);
   --color: var(--text-primary);
   --border-radius: var(--radius-md);
 }
 
 ion-badge {
   --background: var(--primary-color);
-  --color: #ffffff;
+  --color: var(--text-on-accent);
 }
 
 ion-menu {
-  --background: var(--medium-color);
+  --background: var(--surface-1);
   --width: 280px;
   --max-width: 280px;
 }
@@ -265,10 +409,184 @@ ion-reorder {
   --color: var(--text-tertiary);
 }
 
-ion-icon {
-  color: var(--text-primary);
-}
-
 ion-spinner {
   --color: var(--primary-color);
+}
+
+/* Deliberately no global `ion-icon { color: ... }`. Ionicons render with
+ * `fill: currentColor`, so they inherit; a direct colour declaration here would beat
+ * that inheritance and flatten every status and accent icon in the app to one colour. */
+
+/* ------------------------------------------------------------------ *
+ * 6. Utilities
+ *
+ * Global rather than scoped so all five views share one definition. Vue's scoped styles
+ * add an attribute to elements but do not stop a global class from matching, so these
+ * apply inside any component. The corollary: when migrating a view, delete its local
+ * container rule, because a scoped two-part selector still outranks these.
+ * ------------------------------------------------------------------ */
+
+.page-container {
+  max-width: var(--container-max-width);
+  margin: 0 auto;
+  padding: var(--spacing-2xl) var(--spacing-3xl);
+}
+
+.page-container--narrow {
+  max-width: 760px;
+}
+
+.page-container--has-fab {
+  padding-bottom: calc(var(--spacing-3xl) + var(--fab-clearance) + env(safe-area-inset-bottom));
+}
+
+.movie-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(var(--card-min, 260px), 1fr));
+  gap: var(--grid-gap, var(--spacing-xl));
+}
+
+/* Horizontal poster rail, used for "Recently added" on small screens. */
+.movie-grid--rail {
+  display: flex;
+  gap: var(--spacing-md);
+  overflow-x: auto;
+  scroll-snap-type: x mandatory;
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+  padding-bottom: var(--spacing-xs);
+}
+
+.movie-grid--rail::-webkit-scrollbar {
+  display: none;
+}
+
+.movie-grid--rail > * {
+  flex: 0 0 var(--rail-card-w, 46vw);
+  scroll-snap-align: start;
+}
+
+/* Tinted icon badge. Finally puts the --*-color-rgb tokens to use. */
+.icon-chip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--chip-size, 56px);
+  height: var(--chip-size, 56px);
+  border-radius: var(--radius-md);
+  flex-shrink: 0;
+  font-size: calc(var(--chip-size, 56px) * 0.44);
+  background: rgba(var(--chip-rgb, var(--primary-color-rgb)), var(--chip-alpha));
+  color: var(--chip-color, var(--primary-text));
+}
+
+.icon-chip--primary {
+  --chip-rgb: var(--primary-color-rgb);
+  --chip-color: var(--primary-text);
+}
+
+.icon-chip--success {
+  --chip-rgb: var(--success-color-rgb);
+  --chip-color: var(--success-text);
+}
+
+.icon-chip--warning {
+  --chip-rgb: var(--warning-color-rgb);
+  --chip-color: var(--warning-text);
+}
+
+.icon-chip--danger {
+  --chip-rgb: var(--danger-color-rgb);
+  --chip-color: var(--danger-text);
+}
+
+/* Reserved for chrome that does not scroll. A blurred backdrop on twenty cards moving
+ * at once is a reliable way to make a low-end Android device stutter. */
+.glass-surface {
+  background: var(--surface-glass);
+  -webkit-backdrop-filter: blur(16px) saturate(140%);
+  backdrop-filter: blur(16px) saturate(140%);
+  border: 1px solid var(--border-color-light);
+}
+
+/* Shared hero block for the Add and Edit forms. */
+.form-hero {
+  text-align: center;
+  margin-bottom: var(--spacing-2xl);
+}
+
+.form-hero__icon {
+  font-size: 3.25rem;
+  color: var(--primary-text);
+  margin-bottom: var(--spacing-md);
+}
+
+.form-hero__title {
+  font-family: var(--font-display);
+  font-size: var(--font-size-3xl);
+  font-weight: 700;
+  color: var(--text-primary);
+  margin: 0 0 var(--spacing-xs);
+  letter-spacing: 0.3px;
+}
+
+.form-hero__subtitle {
+  font-size: var(--font-size-base);
+  color: var(--text-secondary);
+  margin: 0 auto;
+  max-width: 460px;
+  line-height: 1.5;
+}
+
+.section-title {
+  font-family: var(--font-display);
+  font-size: var(--font-size-2xl);
+  font-weight: 700;
+  color: var(--text-primary);
+  margin: 0;
+  letter-spacing: 0.4px;
+}
+
+@media (max-width: 767.98px) {
+  .page-container {
+    padding: var(--spacing-lg) var(--spacing-md);
+  }
+
+  .movie-grid {
+    --card-min: 150px;
+    --grid-gap: var(--spacing-md);
+  }
+
+  .form-hero__icon {
+    font-size: 2.5rem;
+  }
+
+  .form-hero__title {
+    font-size: var(--font-size-2xl);
+  }
+
+  .section-title {
+    font-size: var(--font-size-xl);
+  }
+}
+
+@media (min-width: 1024px) {
+  .page-container {
+    padding: var(--spacing-3xl) var(--spacing-4xl);
+  }
+
+  .movie-grid {
+    --card-min: 240px;
+    --grid-gap: var(--spacing-2xl);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
 }
