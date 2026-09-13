@@ -158,13 +158,11 @@ const SORTS: SortOption[] = [
   'year-asc'
 ];
 
-// Guards the two-way binding below from chasing its own tail.
 let syncing = false;
 
 const syncFromQuery = () => {
   const { status, genre, sort, q } = route.query;
 
-  // Never trust the URL: anything unrecognised falls back to the default.
   statusFilter.value = STATUSES.includes(status as FilterOption)
     ? (status as FilterOption)
     : 'all';
@@ -183,8 +181,7 @@ const applyQuery = () => {
   if (sortOption.value !== 'recent') query.sort = sortOption.value;
   if (searchQuery.value) query.q = searchQuery.value;
 
-  // replace, not push: otherwise every keystroke in the search box becomes a history
-  // entry and the Android back button turns into a typing undo.
+
   router.replace({ path: '/watchlist', query });
 };
 
@@ -227,7 +224,7 @@ const filteredMovies = computed(() => {
   return movieService.sortMovies(list, sortOption.value);
 });
 
-/** A filtered view with no results is not the same as an empty collection. */
+
 const emptyState = computed(() => {
   if (searchQuery.value) {
     return {

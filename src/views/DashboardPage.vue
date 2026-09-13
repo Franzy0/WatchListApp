@@ -51,8 +51,7 @@
         </section>
       </div>
 
-      <!-- Direct child of ion-content: slot="fixed" is ignored on a deeper descendant,
-           which is why this used to scroll away with the page. -->
+     
       <ion-fab vertical="bottom" horizontal="end" slot="fixed">
         <ion-fab-button color="primary" aria-label="Add a movie" @click="goToAddMovie">
           <ion-icon :icon="addOutline" />
@@ -89,7 +88,7 @@ const { showToast } = useToast();
 const { confirmDelete } = useConfirmDelete();
 const { isMobile } = useBreakpoint();
 
-// These read the live store, so they refresh on their own whenever the database changes.
+
 const recentMovies = computed(() => movieService.getRecentMovies(6));
 const stats = computed(() => movieService.getStats());
 
@@ -102,7 +101,7 @@ const welcomeMessage = computed(() =>
 );
 
 onMounted(() => {
-  // The store subscribes at import time; this only surfaces a connection failure.
+
   movieService.getMovies().catch(error => {
     console.error('Error loading movies:', error);
     showToast('Could not reach the movie database.', 'danger');
@@ -153,8 +152,7 @@ const handleDelete = async (movie: Movie) => {
   border: 1px solid var(--border-color);
 }
 
-/* The newest poster, blurred out of recognition, as a cheap cinematic backdrop. It is
-   an image the page has already loaded, so it costs nothing extra. */
+
 .hero-backdrop {
   position: absolute;
   inset: -40px;

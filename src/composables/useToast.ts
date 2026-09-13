@@ -7,12 +7,7 @@ export interface ShowToastOptions {
   position?: 'top' | 'bottom' | 'middle';
 }
 
-/**
- * One toast helper for the whole app.
- *
- * Every page used to carry its own copy that hardcoded a green success colour, so
- * failures were announced as successes. Colour is a real parameter here.
- */
+
 export const useToast = () => {
   const showToast = async (
     message: string,
