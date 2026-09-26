@@ -71,12 +71,12 @@ const handleSubmit = async (payload: MovieFormSubmit) => {
   if (payload.poster.action === 'replace') {
     updates.posterUrl = payload.poster.dataUrl;
   } else if (payload.poster.action === 'remove') {
-    // null rather than undefined: Realtime Database reads null as "delete this key".
+
     updates.posterUrl = null;
   }
 
   try {
-    // Text and poster land in the same update, so the record is never half-changed.
+   
     await movieService.updateMovie(current.id, updates);
     showToast('Movie updated.');
     router.push('/watchlist');

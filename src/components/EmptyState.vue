@@ -27,7 +27,7 @@ interface Props {
   title?: string;
   message?: string;
   showAddButton?: boolean;
-  /** An ionicons value. Defaults to the film icon. */
+ 
   icon?: string;
   actionLabel?: string;
 }

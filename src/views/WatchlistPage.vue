@@ -194,8 +194,7 @@ onMounted(() => {
   });
 });
 
-// Navigating here from an already-mounted watchlist reuses the component, so onMounted
-// alone would silently ignore the second stat-tile tap.
+
 watch(
   () => route.query,
   async () => {
@@ -288,7 +287,7 @@ const handleDelete = async (movie: Movie) => {
   if (!confirmed) return;
 
   try {
-    // The live store drops the card on its own once the record is gone.
+   
     await movieService.deleteMovie(movie.id);
     showToast('Movie deleted.');
   } catch (error) {
