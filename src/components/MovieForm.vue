@@ -1,6 +1,6 @@
 <template>
   <form class="movie-form" novalidate @submit.prevent="handleSubmit">
-    <!-- Poster picker -->
+    
     <div class="poster-field">
       <button
         type="button"
@@ -42,9 +42,7 @@
       <p v-if="posterError" class="field-error poster-error">{{ posterError }}</p>
     </div>
 
-    <!-- Text fields. The caption is a property of the control in Ionic 9; the old
-         ion-item plus floating ion-label pairing silently stopped working in Ionic 8
-         and left the input painted over its own caption. -->
+ 
     <ion-input
       v-model="formData.title"
       class="form-field"
@@ -79,8 +77,7 @@
         </ion-select-option>
       </ion-select>
 
-      <!-- The collapsed select only shows a comma list, which truncates once a few are
-           picked. The chips make the full selection visible and individually removable. -->
+
       <div v-if="formData.genre.length" class="genre-chips">
         <button
           v-for="genre in formData.genre"
@@ -201,7 +198,7 @@ import type {
 
 interface Props {
   movie?: Movie;
-  /** The page is saving. Disables the form and shows progress. */
+  
   busy?: boolean;
 }
 
@@ -226,10 +223,7 @@ const formData = ref({
   status: 'Not Watched' as MovieStatus
 });
 
-// Poster state is kept out of formData. It is not a text field, and keeping it separate
-// is what lets the payload say plainly whether the picture should be kept, replaced or
-// cleared. A picked photo is already the data URL that will be written to `posterUrl`,
-// so the preview shows exactly what will be saved.
+
 const existingPosterUrl = ref<string | null>(null);
 const pickedPosterUrl = ref<string | null>(null);
 const posterRemoved = ref(false);
@@ -273,7 +267,7 @@ const submitButtonText = computed(() => (props.movie ? 'Save Changes' : 'Save Mo
 const hydrate = (movie: Movie) => {
   formData.value = {
     title: movie.title,
-    // Copied, not aliased: editing the chips must not mutate the stored record.
+ 
     genre: [...movie.genre],
     year: movie.year,
     rating: movie.rating,
@@ -287,8 +281,7 @@ onMounted(() => {
   if (props.movie) hydrate(props.movie);
 });
 
-// The edit page gates rendering on the movie, but watching keeps the form correct if a
-// parent ever swaps the record while this component stays mounted.
+
 watch(
   () => props.movie,
   movie => {

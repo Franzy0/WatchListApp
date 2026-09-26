@@ -106,8 +106,7 @@ defineEmits<{
 const posterLoaded = ref(false);
 const posterFailed = ref(false);
 
-// Editing a movie swaps the URL on a component the list keeps alive, so the load and
-// error flags have to be reset or a replaced poster stays stuck behind its skeleton.
+
 watch(
   () => props.movie.posterUrl,
   () => {

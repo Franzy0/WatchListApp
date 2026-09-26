@@ -21,8 +21,6 @@
           </ion-item>
         </ion-list>
 
-        <!-- The toolbar toggle is the fast affordance; this one is the explanatory one.
-             It is desktop-only by virtue of the menu being disabled on mobile. -->
         <div class="menu-footer">
           <ion-item lines="none" class="theme-row">
             <ion-icon slot="start" :icon="isDark ? moonOutline : sunnyOutline" />
@@ -105,10 +103,7 @@ const closeMenu = async () => {
 </script>
 
 <style scoped>
-/* The tab bar is used outside <ion-tabs>, so its slot="bottom" carries no meaning and it
- * is simply the next flex child after the router outlet. The outlet is size-contained,
- * which makes its intrinsic height zero, so without an explicit grow it collapses and
- * the bar rides up over the page. */
+
 #main-content {
   display: flex;
   flex-direction: column;

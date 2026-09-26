@@ -113,7 +113,7 @@ const goToAddMovie = () => router.push('/add');
 const handleOpen = (movie: Movie) => router.push(`/movie/${movie.id}`);
 const handleEdit = (movie: Movie) => router.push(`/edit/${movie.id}`);
 
-/** Each tile deep-links into the watchlist with its filter already applied. */
+
 const handleStatTile = (key: StatKey) => {
   const query: Record<string, string> = {
     total: { status: 'all' },

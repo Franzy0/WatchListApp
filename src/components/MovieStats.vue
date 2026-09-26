@@ -35,8 +35,7 @@ defineEmits<{
   (e: 'tile-click', key: StatKey): void;
 }>();
 
-// Stats arrive as a prop now. Fetching them here meant the tiles read a plain module
-// variable through a computed with no reactive dependency, so they showed zero forever.
+
 const tiles = computed(() => [
   {
     key: 'total' as StatKey,

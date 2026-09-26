@@ -38,8 +38,7 @@ const handleSubmit = async (payload: MovieFormSubmit) => {
   busy.value = true;
 
   try {
-    // One write. The poster goes in as `posterUrl` on the record itself, so there is no
-    // second upload step that can fail after the movie has already been saved.
+  
     await movieService.addMovie({
       ...payload.data,
       posterUrl: payload.poster.action === 'replace' ? payload.poster.dataUrl : undefined
